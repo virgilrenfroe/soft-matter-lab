@@ -1,6 +1,6 @@
 # Soft Matter Lab
 
-A waves, cloth, and flow lab for shop class and intro physics — by Virgil Renfroe.
+A waves, cloth, flow, and surface-tension lab for shop class and intro physics — by Virgil Renfroe.
 
 GitHub Pages (same source, once enabled): https://virgilrenfroe.github.io/soft-matter-lab/  
 Repo: https://github.com/virgilrenfroe/soft-matter-lab
@@ -15,6 +15,7 @@ Railway is the live host. `Dockerfile`, `Caddyfile`, and `railway.toml` are read
 2. **Cloth** — a pinned sheet shares tension. Drag a point, add wind, or send a gust.
 3. **Flow** — ink is carried around a post. The material itself moves.
 4. **Centerpiece** — wave and cloth side by side.
+5. **Surface tension** — a drop's skin pulls it into a bead, or lets it wet out. Poke the drop and watch the skin pull back.
 
 ## Local
 

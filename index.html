@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07080e" />
-  <meta name="description" content="Soft Matter Lab — a waves, cloth, and flow exhibit for shop class and intro physics. A crest travels while the material stays. Cloth shares tension. Flow carries ink." />
-  <title>Soft Matter Lab · Virgil Renfroe</title>
+  <meta name="description" content="Soft Matter Lab — a waves, cloth, flow, and surface-tension exhibit for shop class and intro physics. A crest travels while the material stays. Cloth shares tension. Flow carries ink. A drop's skin pulls it into a bead, or lets it wet out." />
+  <title>Soft Matter Lab</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
@@ -145,6 +145,8 @@
     /* —— Hero —— */
     .hero {
       min-height: 100svh;
+      height: 100svh;
+      overflow: hidden;
       padding: 6.5rem 4vw 2.5rem;
       display: grid;
       grid-template-columns: 1.35fr 0.75fr;
@@ -243,7 +245,10 @@
       align-self: start;
       padding-top: 7vh;
       display: grid;
-      gap: 1.15rem;
+      gap: 0.85rem;
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      min-height: 0;
     }
     .field-notes li:nth-child(even) { margin-left: 14%; }
     .field-notes li:nth-child(3) { margin-left: 5%; }
@@ -605,9 +610,16 @@
       .hud-live { display: none; }
       .hero {
         min-height: auto;
+        height: auto;
+        overflow: visible;
         grid-template-columns: 1fr;
         grid-template-rows: auto;
         padding: 5.2rem 1.1rem 2rem;
+      }
+      .field-notes {
+        grid-column: auto;
+        grid-row: auto;
+        min-height: 0;
       }
       .hero h1 { font-size: clamp(4.2rem, 22vw, 6.4rem); }
       .hero h1 .line-b { margin-left: 0.18em; }
@@ -683,14 +695,15 @@
         <a href="#s02">02 Cloth</a>
         <a href="#s03">03 Flow</a>
         <a href="#s04">04 Pair</a>
+        <a href="#s05">05 Drop</a>
         <a href="#teachers">Teachers</a>
       </div>
-      <span class="hud-live">One context</span>
+      <span class="hud-live">Watch what stays</span>
     </nav>
 
     <header class="hero" id="top">
       <div class="hero-copy">
-        <p class="hero-kicker">Technique exhibit · Education · Virgil Renfroe</p>
+        <p class="hero-kicker">Shop class · Intro physics</p>
         <h1>
           <span class="line line-a">Soft</span>
           <span class="line line-b"><em>Matter</em></span>
@@ -701,15 +714,17 @@
         <li><b>Wave</b><strong>Crest</strong><em>The crest travels. The float stays on its mast.</em></li>
         <li><b>Cloth</b><strong>Tension</strong><em>One pull. Neighbors share the tension.</em></li>
         <li><b>Flow</b><strong>Ink</strong><em>The ink itself is carried downstream.</em></li>
+        <li><b>Skin</b><strong>Bead</strong><em>The skin pulls a drop into a bead, or lets it wet out.</em></li>
         <li><b>Soft</b><strong>Body</strong><em>The shape changes. The body stays one piece.</em></li>
         <li><b>Medium</b><strong>Stuff</strong><em>The stuff a wave moves through.</em></li>
       </ol>
       <div class="hero-foot">
-        <p class="hero-sub">A waves, cloth, and flow lab for shop class and intro physics. Watch what moves — and what stays.</p>
+        <p class="hero-sub">A waves, cloth, flow, and surface-tension lab for shop class and intro physics. Watch what moves — and what stays.</p>
         <div class="hero-meta">
           <span>HS / intro college</span>
-          <span>three.js · one WebGL context</span>
+          <span>Tension is shared</span>
           <span>Energy moves · matter may stay</span>
+          <span>A drop's skin · bead or wet-out</span>
         </div>
         <a class="enter" href="#s01">Enter the lab</a>
       </div>
@@ -891,6 +906,51 @@
       </aside>
     </section>
 
+    <section class="specimen anchor-bl" id="s05">
+      <div class="stage">
+        <p class="ghost-index ghost-tr" aria-hidden="true">05</p>
+        <div class="view-label">Skin pulls · bead or wet-out</div>
+        <div class="view mode-pull" data-scene="drop" tabindex="0" aria-label="Surface tension droplet viewport"></div>
+      </div>
+      <aside class="placard">
+        <div class="placard-stack">
+          <p class="specimen-num">Specimen 05 — Surface tension</p>
+          <h2 class="specimen-title">The skin pulls the drop.</h2>
+          <div class="sheet">
+            <p class="notice">Note — surface tension is the pull in a liquid's skin. That pull makes a bead, or lets the drop wet out.</p>
+            <div class="lesson">
+              <p>A liquid has a skin. The skin pulls inward.</p>
+              <p>On a plate that sheds the liquid, the drop stays a tall bead. The foot stays small.</p>
+              <p>On a plate the liquid likes, the same drop spreads and wets out. It gets short and wide. The amount of liquid does not change.</p>
+              <p>The colored stitches sit on the skin. They ride the skin. They do not sink inside.</p>
+            </div>
+            <div class="try">
+              <strong>Try this</strong>
+              <p>Start on Bead. Poke the drop and let go. The skin pulls it round again. Switch to Wet out and watch that same liquid spread flat. Then raise Skin and poke once more — a stronger skin snaps back faster.</p>
+            </div>
+            <div class="chips" role="group" aria-label="Drop shape">
+              <button type="button" class="chip" data-drop="bead" aria-pressed="true">Bead</button>
+              <button type="button" class="chip" data-drop="wet" aria-pressed="false">Wet out</button>
+            </div>
+            <div class="chips" role="group" aria-label="Drop pointer mode">
+              <button type="button" class="chip" data-drop-mode="poke" aria-pressed="true">Poke</button>
+              <button type="button" class="chip" data-drop-mode="orbit" aria-pressed="false">Orbit</button>
+            </div>
+            <div class="ctrls">
+              <label class="ctrl">Wetting
+                <input id="drop-wet" type="range" min="0" max="1" step="0.01" value="0.18" />
+                <output id="drop-wet-out" for="drop-wet">0.18</output>
+              </label>
+              <label class="ctrl">Skin
+                <input id="drop-skin" type="range" min="0.15" max="1.35" step="0.01" value="0.86" />
+                <output id="drop-skin-out" for="drop-skin">0.86</output>
+              </label>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
     <section class="teachers" id="teachers">
       <div>
         <h2>For <em>teachers</em></h2>
@@ -904,20 +964,21 @@
             <li>Point to a float and show that it does not travel with the crest.</li>
             <li>Explain tension as a pull shared by neighboring parts of a cloth.</li>
             <li>Contrast flow, which carries material, with a wave, which does not.</li>
+            <li>Describe surface tension as the pull in a liquid's skin, and contrast a beaded drop with one that wets out.</li>
           </ul>
         </div>
         <div class="teach-card">
           <h3>10-minute classroom activity</h3>
-          <p>1) Specimen 01: pick one float. Does it cross the tank? 2) Drop a stone and sketch the ring. 3) Specimen 02: drag once and name what the neighbors do. 4) Specimen 03: follow one ink drop. Write one sentence on how flow differs from the wave.</p>
+          <p>1) Specimen 01: pick one float. Does it cross the tank? 2) Drop a stone and sketch the ring. 3) Specimen 02: drag once and name what the neighbors do. 4) Specimen 03: follow one ink drop. Write one sentence on how flow differs from the wave. 5) Specimen 05: choose Bead, poke the drop, and watch the skin pull it round. Switch to Wet out. Sketch both shapes. Name surface tension as that pull.</p>
         </div>
         <div class="map-cols">
           <div class="teach-card">
             <h3>Shop &amp; continuum map</h3>
-            <p>Ripple tanks, flags and shade cloth, wind on a loose cover, ink in a flume. Useful before anyone says “partial differential equation.”</p>
+            <p>Ripple tanks, flags and shade cloth, wind on a loose cover, ink in a flume, a bead of water on wax paper, and the same water wetting clean glass. Useful before anyone says “partial differential equation.”</p>
           </div>
           <div class="teach-card">
             <h3>Intro physics map</h3>
-            <p>Transverse waves, wavelength and tempo, damping, tension in a membrane, advection versus wave motion.</p>
+            <p>Transverse waves, wavelength and tempo, damping, tension in a membrane, advection versus wave motion, and surface tension — bead versus wet-out.</p>
           </div>
         </div>
       </div>
