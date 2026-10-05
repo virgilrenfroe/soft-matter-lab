@@ -681,6 +681,434 @@ function circleTexture() {
   return tex;
 }
 
+/* ——— Sessile drop: fixed volume, skin pulls toward the spherical cap ——— */
+
+class SessileDrop {
+  constructor(latBands, segs, volume) {
+    this.latBands = latBands;
+    this.segs = segs;
+    this.volume = volume;
+    this.count = latBands * segs + 1;
+    this.apex = this.count - 1;
+    this.pos = new Float32Array(this.count * 3);
+    this.prev = new Float32Array(this.count * 3);
+    this.target = new Float32Array(this.count * 3);
+    this.inv = new Float32Array(this.count);
+    this.inv.fill(1);
+    this.constraints = [];
+    this.grab = -1;
+    this.holdX = 0;
+    this.holdY = 0;
+    this.holdZ = 0;
+    this.theta = 1;
+    this.R = 1;
+    this.yc = 0;
+    this.height = 0.5;
+    this.baseR = 0.5;
+    this.footR = 0.5;
+    this.wetting = 0.18;
+    this.nextDent = -1;
+    this._link();
+    this.setWetting(0.18);
+    this.pos.set(this.target);
+    this.prev.set(this.target);
+    this._buildGeo();
+    this._buildMarkers();
+  }
+
+  _link() {
+    const { segs, latBands, apex } = this;
+    const id = (r, s) => r * segs + ((s % segs) + segs) % segs;
+    const link = (a, b) => this.constraints.push({ a, b, rest: 1 });
+    for (let r = 0; r < latBands; r++) {
+      for (let s = 0; s < segs; s++) {
+        link(id(r, s), id(r, s + 1));
+        if (r + 1 < latBands) {
+          link(id(r, s), id(r + 1, s));
+          link(id(r, s), id(r + 1, s + 1));
+        } else {
+          link(id(r, s), apex);
+        }
+      }
+    }
+  }
+
+  setWetting(w) {
+    const clamped = Math.max(0, Math.min(1, w));
+    const deg = 150 - clamped * 132;
+    const theta = (deg * Math.PI) / 180;
+    const cosT = Math.cos(theta);
+    const sinT = Math.sin(theta);
+    const shape = (1 - cosT) * (1 - cosT) * (2 + cosT);
+    const R = Math.cbrt((3 * this.volume) / (Math.PI * Math.max(shape, 1e-5)));
+    const yc = -R * cosT;
+    this.wetting = clamped;
+    this.theta = theta;
+    this.R = R;
+    this.yc = yc;
+    this.baseR = R * sinT;
+    this.height = R * (1 - cosT);
+    const { segs, latBands, target } = this;
+    for (let r = 0; r < latBands; r++) {
+      const alpha = theta * (1 - r / latBands);
+      const rad = R * Math.sin(alpha);
+      const y = Math.max(0, yc + R * Math.cos(alpha));
+      for (let s = 0; s < segs; s++) {
+        const phi = (s / segs) * Math.PI * 2;
+        const o = (r * segs + s) * 3;
+        target[o] = rad * Math.cos(phi);
+        target[o + 1] = y;
+        target[o + 2] = rad * Math.sin(phi);
+      }
+    }
+    const ao = this.apex * 3;
+    target[ao] = 0;
+    target[ao + 1] = Math.max(0, yc + R);
+    target[ao + 2] = 0;
+    for (let n = 0; n < this.constraints.length; n++) {
+      const c = this.constraints[n];
+      const ia = c.a * 3;
+      const ib = c.b * 3;
+      const dx = target[ia] - target[ib];
+      const dy = target[ia + 1] - target[ib + 1];
+      const dz = target[ia + 2] - target[ib + 2];
+      c.rest = Math.hypot(dx, dy, dz);
+    }
+  }
+
+  _buildGeo() {
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(this.count * 3);
+    positions.set(this.pos);
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const colors = new Float32Array(this.count * 3);
+    const c0 = new THREE.Color(0x0c5f73);
+    const c1 = new THREE.Color(0x49d0dc);
+    const c2 = new THREE.Color(0xf3fffd);
+    const tmp = new THREE.Color();
+    for (let r = 0; r < this.latBands; r++) {
+      const t = r / Math.max(1, this.latBands - 1);
+      if (t < 0.55) tmp.copy(c0).lerp(c1, t / 0.55);
+      else tmp.copy(c1).lerp(c2, (t - 0.55) / 0.45);
+      for (let s = 0; s < this.segs; s++) {
+        const o = (r * this.segs + s) * 3;
+        colors[o] = tmp.r;
+        colors[o + 1] = tmp.g;
+        colors[o + 2] = tmp.b;
+      }
+    }
+    const ao = this.apex * 3;
+    colors[ao] = c2.r;
+    colors[ao + 1] = c2.g;
+    colors[ao + 2] = c2.b;
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const indices = [];
+    const id = (r, s) => r * this.segs + ((s % this.segs) + this.segs) % this.segs;
+    for (let r = 0; r < this.latBands - 1; r++) {
+      for (let s = 0; s < this.segs; s++) {
+        const a = id(r, s);
+        const b = id(r, s + 1);
+        const c = id(r + 1, s);
+        const d = id(r + 1, s + 1);
+        indices.push(a, b, d, a, d, c);
+      }
+    }
+    const rTop = this.latBands - 1;
+    for (let s = 0; s < this.segs; s++) {
+      indices.push(id(rTop, s), id(rTop, s + 1), this.apex);
+    }
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const nrm = geo.attributes.normal;
+    const side = Math.min(this.count - 2, Math.floor(this.latBands / 2) * this.segs);
+    const outward =
+      nrm.getX(side) * this.pos[side * 3] +
+      nrm.getY(side) * (this.pos[side * 3 + 1] - this.yc) +
+      nrm.getZ(side) * this.pos[side * 3 + 2];
+    if (outward < 0) {
+      for (let i = 0; i < indices.length; i += 3) {
+        const swap = indices[i];
+        indices[i] = indices[i + 1];
+        indices[i + 1] = swap;
+      }
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+    }
+    this.geo = geo;
+    this.mesh = new THREE.Mesh(
+      geo,
+      new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        roughness: 0.14,
+        metalness: 0.02,
+        clearcoat: 0.55,
+        clearcoatRoughness: 0.2,
+        envMapIntensity: 1.15,
+        side: THREE.DoubleSide,
+      })
+    );
+    this.mesh.frustumCulled = false;
+
+    const foot = new THREE.BufferGeometry();
+    foot.setAttribute('position', new THREE.BufferAttribute(new Float32Array(this.segs * 2 * 3), 3));
+    const footIndex = [];
+    for (let s = 0; s < this.segs; s++) {
+      const s2 = (s + 1) % this.segs;
+      const i0 = s * 2;
+      const o0 = i0 + 1;
+      const i1 = s2 * 2;
+      const o1 = i1 + 1;
+      footIndex.push(i0, o0, o1, i0, o1, i1);
+    }
+    foot.setIndex(footIndex);
+    this.footGeo = foot;
+    this.footMesh = new THREE.Mesh(
+      foot,
+      new THREE.MeshStandardMaterial({
+        color: 0xff9d2c,
+        emissive: 0xff9d2c,
+        emissiveIntensity: 0.55,
+        roughness: 0.4,
+      })
+    );
+    this.footMesh.frustumCulled = false;
+
+    const cap = new THREE.BufferGeometry();
+    cap.setAttribute('position', new THREE.BufferAttribute(new Float32Array((this.segs + 1) * 3), 3));
+    const capIndex = [];
+    for (let s = 0; s < this.segs; s++) {
+      capIndex.push(0, s + 1, ((s + 1) % this.segs) + 1);
+    }
+    cap.setIndex(capIndex);
+    cap.computeVertexNormals();
+    this.capGeo = cap;
+    this.capMesh = new THREE.Mesh(
+      cap,
+      new THREE.MeshStandardMaterial({
+        color: 0x0c5f73,
+        roughness: 0.28,
+        metalness: 0.02,
+        envMapIntensity: 0.6,
+        side: THREE.DoubleSide,
+      })
+    );
+    this.capMesh.frustumCulled = false;
+  }
+
+  _buildMarkers() {
+    this.markers = [];
+    const markerColors = [0xffc857, 0xff5a1f, 0x7ec8ff, 0xc8f542, 0xf4efe6];
+    const mid = Math.max(1, Math.floor(this.latBands * 0.46));
+    const specs = [this.apex];
+    for (let k = 0; k < 4; k++) {
+      specs.push(mid * this.segs + Math.floor(((k + 0.5) * this.segs) / 4));
+    }
+    for (let m = 0; m < specs.length; m++) {
+      const color = markerColors[m % markerColors.length];
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.052, 14, 10),
+        new THREE.MeshStandardMaterial({
+          color,
+          emissive: color,
+          emissiveIntensity: 0.42,
+          roughness: 0.38,
+        })
+      );
+      this.markers.push({ mesh, index: specs[m] });
+    }
+  }
+
+  snap() {
+    this.pos.set(this.target);
+    this.prev.set(this.target);
+    this.grab = -1;
+    for (let i = 0; i < this.count; i++) this.inv[i] = 1;
+  }
+
+  grabAt(index) {
+    if (index < 0 || index >= this.count) return false;
+    this.grab = index;
+    this.inv[index] = 0;
+    const o = index * 3;
+    this.holdX = this.pos[o];
+    this.holdY = this.pos[o + 1];
+    this.holdZ = this.pos[o + 2];
+    return true;
+  }
+
+  moveGrab(x, y, z) {
+    if (this.grab < 0) return;
+    this.holdX = Math.max(-1.7, Math.min(1.7, x));
+    this.holdY = Math.max(0.02, Math.min(1.65, y));
+    this.holdZ = Math.max(-1.7, Math.min(1.7, z));
+    if (this.grab < this.segs) this.holdY = 0;
+    this._pinGrab();
+    this._solve(0.72, 2);
+    this._project();
+    this._pinGrab();
+  }
+
+  _pinGrab() {
+    if (this.grab < 0) return;
+    const o = this.grab * 3;
+    this.pos[o] = this.holdX;
+    this.pos[o + 1] = this.holdY;
+    this.pos[o + 2] = this.holdZ;
+  }
+
+  releaseGrab() {
+    if (this.grab < 0) return;
+    this.inv[this.grab] = 1;
+    this.grab = -1;
+  }
+
+  dent() {
+    const amp = Math.min(0.28, Math.max(0.04, this.height * 0.36));
+    const ao = this.apex * 3;
+    this.pos[ao + 1] = Math.max(0.03, this.pos[ao + 1] - amp);
+    const r = this.latBands - 1;
+    for (let s = 0; s < this.segs; s++) {
+      const o = (r * this.segs + s) * 3;
+      const rad = Math.hypot(this.pos[o], this.pos[o + 2]) || 1e-4;
+      const push = amp * 0.42;
+      this.pos[o] += (this.pos[o] / rad) * push;
+      this.pos[o + 2] += (this.pos[o + 2] / rad) * push;
+      this.pos[o + 1] = Math.max(0, this.pos[o + 1] - amp * 0.32);
+    }
+    this.prev.set(this.pos);
+  }
+
+  _pull(beta) {
+    const { pos, target, count, grab, segs } = this;
+    for (let i = 0; i < count; i++) {
+      if (i === grab) continue;
+      const o = i * 3;
+      pos[o] += (target[o] - pos[o]) * beta;
+      pos[o + 2] += (target[o + 2] - pos[o + 2]) * beta;
+      if (i < segs) pos[o + 1] = 0;
+      else pos[o + 1] += (target[o + 1] - pos[o + 1]) * beta;
+    }
+  }
+
+  _project() {
+    const { segs, pos, count } = this;
+    for (let s = 0; s < segs; s++) pos[s * 3 + 1] = 0;
+    for (let i = 0; i < count; i++) {
+      const o = i * 3;
+      if (pos[o + 1] < 0) pos[o + 1] = 0;
+      if (pos[o + 1] > 1.85) pos[o + 1] = 1.85;
+      if (pos[o] > 1.85) pos[o] = 1.85;
+      if (pos[o] < -1.85) pos[o] = -1.85;
+      if (pos[o + 2] > 1.85) pos[o + 2] = 1.85;
+      if (pos[o + 2] < -1.85) pos[o + 2] = -1.85;
+    }
+  }
+
+  _solve(stiff, iters) {
+    const { pos, inv, constraints } = this;
+    for (let k = 0; k < iters; k++) {
+      for (let n = 0; n < constraints.length; n++) {
+        const c = constraints[n];
+        const ia = c.a * 3;
+        const ib = c.b * 3;
+        const wa = inv[c.a];
+        const wb = inv[c.b];
+        const w = wa + wb;
+        if (w === 0 || c.rest <= 1e-5) continue;
+        let dx = pos[ib] - pos[ia];
+        let dy = pos[ib + 1] - pos[ia + 1];
+        let dz = pos[ib + 2] - pos[ia + 2];
+        const dist = Math.hypot(dx, dy, dz) || 1e-6;
+        const diff = (dist - c.rest) / dist;
+        let corr = (diff * stiff) / w;
+        if (corr > 0.65) corr = 0.65;
+        if (corr < -0.65) corr = -0.65;
+        if (wa) {
+          pos[ia] += dx * corr * wa;
+          pos[ia + 1] += dy * corr * wa;
+          pos[ia + 2] += dz * corr * wa;
+        }
+        if (wb) {
+          pos[ib] -= dx * corr * wb;
+          pos[ib + 1] -= dy * corr * wb;
+          pos[ib + 2] -= dz * corr * wb;
+        }
+      }
+      this._project();
+      this._pinGrab();
+    }
+  }
+
+  step(dt, opts) {
+    if (!opts.motion && this.grab < 0) {
+      this.pos.set(this.target);
+      this.prev.set(this.target);
+      return;
+    }
+    const sub = Math.min(Math.max(dt, 0.001), 0.033);
+    const held = this.grab >= 0 ? 0.42 : 1;
+    const beta60 = Math.min(0.42, (0.04 + Math.max(0, opts.skin) * 0.18) * held);
+    const beta = 1 - Math.pow(1 - beta60, sub * 60);
+    this._pull(beta);
+    this._solve(Math.min(0.92, 0.42 + opts.skin * 0.34), opts.skin > 0.75 ? 4 : 3);
+    this._pinGrab();
+    const y = this.pos[this.apex * 3 + 1];
+    if (!Number.isFinite(y) || y > 2.4) this.snap();
+  }
+
+  sync() {
+    const attr = this.geo.attributes.position;
+    attr.array.set(this.pos);
+    attr.needsUpdate = true;
+    this.geo.computeVertexNormals();
+    const yc = this.yc;
+    for (const m of this.markers) {
+      const o = m.index * 3;
+      const x = this.pos[o];
+      const y = this.pos[o + 1];
+      const z = this.pos[o + 2];
+      let nx = x;
+      let ny = y - yc;
+      let nz = z;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      const lift = 0.05;
+      m.mesh.position.set(x + (nx / len) * lift, y + (ny / len) * lift, z + (nz / len) * lift);
+    }
+    let rSum = 0;
+    const ribbon = 0.016;
+    const footAttr = this.footGeo.attributes.position;
+    for (let s = 0; s < this.segs; s++) {
+      const o = s * 3;
+      const x = this.pos[o];
+      const z = this.pos[o + 2];
+      const rad = Math.hypot(x, z) || 1e-4;
+      rSum += rad;
+      const nx = x / rad;
+      const nz = z / rad;
+      footAttr.setXYZ(s * 2, x - nx * ribbon, 0.008, z - nz * ribbon);
+      footAttr.setXYZ(s * 2 + 1, x + nx * ribbon, 0.008, z + nz * ribbon);
+    }
+    footAttr.needsUpdate = true;
+    this.footR = rSum / this.segs;
+    const capAttr = this.capGeo.attributes.position;
+    let cx = 0;
+    let cz = 0;
+    for (let s = 0; s < this.segs; s++) {
+      cx += this.pos[s * 3];
+      cz += this.pos[s * 3 + 2];
+    }
+    cx /= this.segs;
+    cz /= this.segs;
+    capAttr.setXYZ(0, cx, 0.006, cz);
+    for (let s = 0; s < this.segs; s++) {
+      capAttr.setXYZ(s + 1, this.pos[s * 3], 0.006, this.pos[s * 3 + 2]);
+    }
+    capAttr.needsUpdate = true;
+    this.capGeo.computeVertexNormals();
+  }
+}
+
 /* ——— Build specimens ——— */
 
 const waveCols = narrowAtStart ? 40 : 68;
@@ -883,6 +1311,46 @@ cmpClothScene.add(cmpRod);
 cmpClothScene.add(cmpCloth.mesh);
 for (const m of cmpCloth.markers) cmpClothScene.add(m.mesh);
 
+const dropBands = narrowAtStart ? 11 : 16;
+const dropSegs = narrowAtStart ? 16 : 28;
+const drop = new SessileDrop(dropBands, dropSegs, 0.62);
+drop.sync();
+
+const dropScene = makeScene(document.querySelector('[data-scene="drop"]'), {
+  bg: 0x121418,
+  px: 1.25,
+  py: 1.12,
+  pz: 2.72,
+  tx: 0,
+  ty: 0.28,
+  tz: 0,
+  fov: 38,
+  minDist: 1.45,
+  maxDist: 7.2,
+});
+dropScene.userData.controls.enabled = false;
+dropScene.userData.controls.maxPolarAngle = Math.PI * 0.48;
+addKeyLight(dropScene, 0xfff1e4, 2.55);
+const dropRim = new THREE.DirectionalLight(0x8ec8ff, 0.85);
+dropRim.position.set(-2.4, 1.6, -1.8);
+dropScene.add(dropRim);
+const dropPlinth = new THREE.Mesh(
+  new THREE.BoxGeometry(3.55, 0.18, 3.55),
+  new THREE.MeshStandardMaterial({ color: 0x6d4b32, roughness: 0.68, metalness: 0.05 })
+);
+dropPlinth.position.y = -0.15;
+dropScene.add(dropPlinth);
+const dropPlate = new THREE.Mesh(
+  new THREE.BoxGeometry(3.25, 0.055, 3.25),
+  new THREE.MeshStandardMaterial({ color: 0xc5ced6, roughness: 0.24, metalness: 0.08, envMapIntensity: 0.75 })
+);
+dropPlate.position.y = -0.028;
+dropScene.add(dropPlate);
+dropScene.add(drop.mesh);
+dropScene.add(drop.capMesh);
+dropScene.add(drop.footMesh);
+for (const m of drop.markers) dropScene.add(m.mesh);
+
 /* ——— UI state ——— */
 
 const ui = {
@@ -896,6 +1364,9 @@ const ui = {
   clothMode: 'pull',
   flowSpeed: 0.72,
   flowSwirl: 0.22,
+  dropWet: 0.18,
+  dropSkin: 0.86,
+  dropMode: 'poke',
   drive: true,
 };
 
@@ -919,6 +1390,88 @@ bindRange('cloth-stiff', (v) => v.toFixed(2), (v) => { ui.clothStiff = v; });
 bindRange('cloth-damp', (v) => v.toFixed(2), (v) => { ui.clothDamp = v; });
 bindRange('flow-speed', (v) => v.toFixed(2), (v) => { ui.flowSpeed = v; });
 bindRange('flow-swirl', (v) => v.toFixed(2), (v) => { ui.flowSwirl = v; });
+bindRange('drop-wet', (v) => v.toFixed(2), (v) => {
+  ui.dropWet = v;
+  drop.setWetting(v);
+  syncDropShapeChips();
+});
+bindRange('drop-skin', (v) => v.toFixed(2), (v) => { ui.dropSkin = v; });
+
+function syncDropShapeChips() {
+  const bead = ui.dropWet < 0.34;
+  const wet = ui.dropWet > 0.72;
+  document.querySelectorAll('[data-drop]').forEach((b) => {
+    const on = (b.dataset.drop === 'bead' && bead) || (b.dataset.drop === 'wet' && wet);
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
+
+document.querySelectorAll('[data-drop]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const wet = document.getElementById('drop-wet');
+    const skin = document.getElementById('drop-skin');
+    if (btn.dataset.drop === 'bead') {
+      wet.value = '0.12';
+      skin.value = '0.96';
+    } else {
+      wet.value = '0.92';
+      skin.value = '0.7';
+    }
+    wet.dispatchEvent(new Event('input'));
+    skin.dispatchEvent(new Event('input'));
+  });
+});
+
+document.querySelectorAll('[data-drop-mode]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    ui.dropMode = btn.dataset.dropMode;
+    dropScene.userData.controls.enabled = ui.dropMode === 'orbit';
+    dropScene.userData.element.classList.toggle('mode-pull', ui.dropMode === 'poke');
+    if (ui.dropMode !== 'poke') drop.releaseGrab();
+    document.querySelectorAll('[data-drop-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+  });
+});
+
+const dropEl = document.querySelector('[data-scene="drop"]');
+dropEl.addEventListener('pointerdown', (e) => {
+  if (ui.dropMode !== 'poke') return;
+  ndcFromEvent(e, dropEl);
+  raycaster.setFromCamera(ndc, dropScene.userData.camera);
+  const hits = raycaster.intersectObject(drop.mesh, false);
+  if (!hits.length || !hits[0].face) return;
+  const face = hits[0].face;
+  const p = hits[0].point;
+  let best = face.a;
+  let bestD = Infinity;
+  for (const idx of [face.a, face.b, face.c]) {
+    const o = idx * 3;
+    const d = (drop.pos[o] - p.x) ** 2 + (drop.pos[o + 1] - p.y) ** 2 + (drop.pos[o + 2] - p.z) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = idx;
+    }
+  }
+  if (!drop.grabAt(best)) return;
+  dropEl.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+dropEl.addEventListener('pointermove', (e) => {
+  if (drop.grab < 0 || ui.dropMode !== 'poke') return;
+  ndcFromEvent(e, dropEl);
+  raycaster.setFromCamera(ndc, dropScene.userData.camera);
+  const o = drop.grab * 3;
+  grabHit.set(drop.pos[o], drop.pos[o + 1], drop.pos[o + 2]);
+  dropScene.userData.camera.getWorldDirection(camForward);
+  grabPlane.setFromNormalAndCoplanarPoint(camForward, grabHit);
+  if (!raycaster.ray.intersectPlane(grabPlane, grabHit)) return;
+  drop.moveGrab(grabHit.x, grabHit.y, grabHit.z);
+  drop.sync();
+});
+function endDropGrab() {
+  drop.releaseGrab();
+}
+dropEl.addEventListener('pointerup', endDropGrab);
+dropEl.addEventListener('pointercancel', endDropGrab);
 
 document.querySelectorAll('[data-wave]').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -1128,6 +1681,19 @@ cmpClothScene.userData.update = (t, dt) => {
   cmpCloth.sync();
 };
 
+dropScene.userData.update = (t, dt) => {
+  const motion = motionOK();
+  if (motion && drop.grab < 0) {
+    if (drop.nextDent < 0) drop.nextDent = t + 1.7;
+    else if (t >= drop.nextDent) {
+      drop.dent();
+      drop.nextDent = t + 4.8;
+    }
+  }
+  drop.step(Math.min(dt, 0.033), { skin: ui.dropSkin, motion });
+  drop.sync();
+};
+
 /* ——— Render loop (single context, scissor per element) ——— */
 let visible = !document.hidden;
 document.addEventListener('visibilitychange', () => {
@@ -1207,6 +1773,7 @@ window.__SML = {
   basin,
   cloth,
   flow,
+  drop,
   ui,
   get frameCount() { return frameCount; },
   get reducedMotion() { return reducedMotion; },
