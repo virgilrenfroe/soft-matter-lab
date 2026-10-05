@@ -907,7 +907,7 @@ class SessileDrop {
     for (let m = 0; m < specs.length; m++) {
       const color = markerColors[m % markerColors.length];
       const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.052, 14, 10),
+        new THREE.SphereGeometry(0.07, 14, 10),
         new THREE.MeshStandardMaterial({
           color,
           emissive: color,
@@ -1047,11 +1047,15 @@ class SessileDrop {
       return;
     }
     const sub = Math.min(Math.max(dt, 0.001), 0.033);
-    const held = this.grab >= 0 ? 0.42 : 1;
-    const beta60 = Math.min(0.42, (0.04 + Math.max(0, opts.skin) * 0.18) * held);
+    const skin = Math.max(0.15, Math.min(1.35, opts.skin));
+    const t = (skin - 0.15) / 1.2;
+    const held = this.grab >= 0 ? 0.55 : 1;
+    const beta60 = Math.min(0.5, (0.03 + t * t * 0.42) * held);
     const beta = 1 - Math.pow(1 - beta60, sub * 60);
+    const stiff = 0.16 + t * 0.72;
+    const iters = 1 + Math.round(t * 3);
     this._pull(beta);
-    this._solve(Math.min(0.92, 0.42 + opts.skin * 0.34), opts.skin > 0.75 ? 4 : 3);
+    this._solve(stiff, iters);
     this._pinGrab();
     const y = this.pos[this.apex * 3 + 1];
     if (!Number.isFinite(y) || y > 2.4) this.snap();
@@ -1072,11 +1076,11 @@ class SessileDrop {
       let ny = y - yc;
       let nz = z;
       const len = Math.hypot(nx, ny, nz) || 1;
-      const lift = 0.05;
+      const lift = 0.02;
       m.mesh.position.set(x + (nx / len) * lift, y + (ny / len) * lift, z + (nz / len) * lift);
     }
     let rSum = 0;
-    const ribbon = 0.016;
+    const ribbon = 0.028;
     const footAttr = this.footGeo.attributes.position;
     for (let s = 0; s < this.segs; s++) {
       const o = s * 3;
@@ -1317,16 +1321,16 @@ const drop = new SessileDrop(dropBands, dropSegs, 0.62);
 drop.sync();
 
 const dropScene = makeScene(document.querySelector('[data-scene="drop"]'), {
-  bg: 0x121418,
-  px: 1.25,
-  py: 1.12,
-  pz: 2.72,
+  bg: 0x101418,
+  px: 2.15,
+  py: 0.82,
+  pz: 2.55,
   tx: 0,
-  ty: 0.28,
+  ty: 0.34,
   tz: 0,
-  fov: 38,
-  minDist: 1.45,
-  maxDist: 7.2,
+  fov: 36,
+  minDist: 1.6,
+  maxDist: 8,
 });
 dropScene.userData.controls.enabled = false;
 dropScene.userData.controls.maxPolarAngle = Math.PI * 0.48;
@@ -1335,16 +1339,16 @@ const dropRim = new THREE.DirectionalLight(0x8ec8ff, 0.85);
 dropRim.position.set(-2.4, 1.6, -1.8);
 dropScene.add(dropRim);
 const dropPlinth = new THREE.Mesh(
-  new THREE.BoxGeometry(3.55, 0.18, 3.55),
-  new THREE.MeshStandardMaterial({ color: 0x6d4b32, roughness: 0.68, metalness: 0.05 })
+  new THREE.BoxGeometry(3.35, 0.2, 3.35),
+  new THREE.MeshStandardMaterial({ color: 0x6d4b32, roughness: 0.72, metalness: 0.04 })
 );
-dropPlinth.position.y = -0.15;
+dropPlinth.position.y = -0.155;
 dropScene.add(dropPlinth);
 const dropPlate = new THREE.Mesh(
-  new THREE.BoxGeometry(3.25, 0.055, 3.25),
-  new THREE.MeshStandardMaterial({ color: 0xc5ced6, roughness: 0.24, metalness: 0.08, envMapIntensity: 0.75 })
+  new THREE.BoxGeometry(2.95, 0.06, 2.95),
+  new THREE.MeshStandardMaterial({ color: 0x8b97a3, roughness: 0.46, metalness: 0.06, envMapIntensity: 0.4 })
 );
-dropPlate.position.y = -0.028;
+dropPlate.position.y = -0.034;
 dropScene.add(dropPlate);
 dropScene.add(drop.mesh);
 dropScene.add(drop.capMesh);
