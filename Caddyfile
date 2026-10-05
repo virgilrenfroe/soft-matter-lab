@@ -1,0 +1,16 @@
+{
+	auto_https off
+	admin off
+}
+:{$PORT:8080} {
+	root * /srv
+	encode gzip
+	@static path *.js *.css *.map *.woff2 *.json
+	handle @static {
+		file_server
+	}
+	handle {
+		try_files {path} {path}.html {path}/ /index.html
+		file_server
+	}
+}
