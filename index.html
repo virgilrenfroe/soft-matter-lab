@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c0a08" />
+  <meta name="description" content="Soft Matter Lab — a waves, cloth, and flow exhibit for shop class and intro physics. A crest travels while the material stays. Cloth shares tension. Flow carries ink." />
+  <title>Soft Matter Lab · Virgil Renfroe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <script>
+    if (new URLSearchParams(location.search).get('embed') === '1') {
+      document.documentElement.classList.add('embed');
+    }
+  </script>
+  <style>
+    :root {
+      --ink: #0c0a08;
+      --paper: #f4efe6;
+      --cream: #e8dfd0;
+      --mute: rgba(244, 239, 230, 0.58);
+      --dim: rgba(244, 239, 230, 0.28);
+      --accent: #ff5a1f;
+      --accent2: #c8f542;
+      --steel: #7ec8ff;
+      --line: rgba(244, 239, 230, 0.14);
+      --card: #16120e;
+      --placard: #1a1612;
+      --mono: "Space Mono", ui-monospace, monospace;
+      --display: "Bricolage Grotesque", sans-serif;
+      --body: "Instrument Sans", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+    body {
+      margin: 0;
+      background: var(--ink);
+      color: var(--paper);
+      font-family: var(--body);
+      font-size: 16px;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+    /* One shared full-page WebGL canvas (multiple-elements pattern) */
+    #c {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+      pointer-events: none;
+      background: var(--ink);
+    }
+    .content {
+      position: relative;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .content a, .content button, .content input, .content label,
+    .content .view, .content .chip, .content .ctrl {
+      pointer-events: auto;
+    }
+
+    /* —— Hero —— */
+    .hero {
+      min-height: 92vh;
+      padding: clamp(1.25rem, 4vw, 3rem);
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: clamp(1rem, 3vw, 2.5rem);
+      align-items: end;
+      position: relative;
+    }
+    .hero-kicker {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 1rem;
+    }
+    .hero h1 {
+      font-family: var(--display);
+      font-weight: 800;
+      font-size: clamp(3.2rem, 11vw, 8.5rem);
+      line-height: 0.88;
+      letter-spacing: -0.04em;
+      margin: 0 0 1.25rem;
+      max-width: 8ch;
+    }
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+    .hero-sub {
+      font-size: clamp(1.05rem, 2.2vw, 1.35rem);
+      max-width: 34ch;
+      color: var(--mute);
+      margin: 0 0 1.75rem;
+      font-weight: 500;
+    }
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem 1.2rem;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+    .hero-meta span { color: var(--paper); }
+    .hero-aside {
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1.5rem;
+      padding-top: 0.5rem;
+    }
+    .hero-diagram {
+      border: 1px solid var(--line);
+      background: linear-gradient(160deg, #1c1712 0%, #0e0c0a 100%);
+      padding: 1.1rem 1.2rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-diagram::before {
+      content: "";
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 70%;
+      height: 90%;
+      background: radial-gradient(circle, rgba(255,90,31,0.22), transparent 65%);
+      pointer-events: none;
+    }
+    .hero-diagram h2 {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin: 0 0 0.85rem;
+      color: var(--accent);
+      position: relative;
+    }
+    .diagram-rows {
+      display: grid;
+      gap: 0.55rem;
+      position: relative;
+      font-size: 13px;
+      color: var(--cream);
+    }
+    .diagram-rows div {
+      display: grid;
+      grid-template-columns: 7.5rem 1fr;
+      gap: 0.6rem;
+      align-items: baseline;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 0.45rem;
+    }
+    .diagram-rows b {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--steel);
+      font-weight: 400;
+    }
+    .scroll-cue {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+    .scroll-cue a { color: var(--paper); text-decoration: none; border-bottom: 1px solid var(--accent); }
+
+    /* —— Specimens —— */
+    .specimen {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr);
+      gap: 0;
+      min-height: 78vh;
+      border-top: 1px solid var(--line);
+      position: relative;
+    }
+    .specimen.centerpiece {
+      grid-template-columns: 1fr;
+      min-height: 92vh;
+    }
+    .view-wrap {
+      position: relative;
+      min-height: 52vh;
+      background: transparent;
+    }
+    .view {
+      width: 100%;
+      height: 100%;
+      min-height: 52vh;
+      position: relative;
+      touch-action: none;
+    }
+    .view.mode-pull { cursor: grab; }
+    .view.mode-pull:active { cursor: grabbing; }
+    .centerpiece .views {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-height: 58vh;
+      border-bottom: 1px solid var(--line);
+    }
+    .centerpiece .view-pane {
+      position: relative;
+      border-right: 1px solid var(--line);
+      min-height: 58vh;
+    }
+    .centerpiece .view-pane:last-child { border-right: none; }
+    .view-label {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      z-index: 3;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      background: rgba(12,10,8,0.72);
+      border: 1px solid var(--line);
+      color: var(--accent2);
+      pointer-events: none;
+    }
+    .placard {
+      background: var(--placard);
+      border-left: 1px solid var(--line);
+      padding: clamp(1.25rem, 3vw, 2rem);
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+      justify-content: center;
+    }
+    .centerpiece .placard {
+      border-left: none;
+      border-top: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 1.5rem 2rem;
+      align-items: start;
+    }
+    .specimen-num {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 0;
+    }
+    .specimen-title {
+      font-family: var(--display);
+      font-weight: 700;
+      font-size: clamp(1.6rem, 3.5vw, 2.4rem);
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      margin: 0;
+    }
+    .notice {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      color: var(--accent2);
+      margin: 0;
+    }
+    .lesson {
+      font-size: 14.5px;
+      color: var(--cream);
+      margin: 0;
+    }
+    .lesson p {
+      margin: 0 0 0.55rem;
+    }
+    .lesson p:last-child { margin-bottom: 0; }
+    .try {
+      border: 1px dashed rgba(200, 245, 66, 0.45);
+      background: rgba(200, 245, 66, 0.06);
+      padding: 0.85rem 1rem;
+    }
+    .try strong {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 0.35rem;
+      font-weight: 700;
+    }
+    .try p { margin: 0; font-size: 14px; color: var(--paper); }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+    }
+    .chip {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0.45rem 0.7rem;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--paper);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .chip:hover, .chip[aria-pressed="true"] {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0c0a08;
+    }
+    .ctrls {
+      display: grid;
+      gap: 0.65rem;
+    }
+    .ctrl {
+      display: grid;
+      grid-template-columns: 6.5rem 1fr 2.6rem;
+      gap: 0.55rem;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--mute);
+    }
+    .ctrl input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+      height: 1.4rem;
+    }
+    .ctrl output { text-align: right; color: var(--paper); }
+
+    /* —— Teachers —— */
+    .teachers {
+      border-top: 1px solid var(--line);
+      padding: clamp(2rem, 5vw, 4rem) clamp(1.25rem, 4vw, 3rem);
+      background: #100e0b;
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: clamp(1.5rem, 4vw, 3rem);
+    }
+    .teachers h2 {
+      font-family: var(--display);
+      font-size: clamp(2rem, 5vw, 3.4rem);
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin: 0 0 0.75rem;
+    }
+    .teachers .lede {
+      color: var(--mute);
+      max-width: 36ch;
+      margin: 0;
+    }
+    .teach-grid {
+      display: grid;
+      gap: 1rem;
+    }
+    .teach-card {
+      border: 1px solid var(--line);
+      padding: 1.1rem 1.2rem;
+      background: var(--card);
+    }
+    .teach-card h3 {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--steel);
+      margin: 0 0 0.6rem;
+      font-weight: 700;
+    }
+    .teach-card ul {
+      margin: 0;
+      padding-left: 1.1rem;
+      color: var(--cream);
+      font-size: 14.5px;
+    }
+    .teach-card li { margin-bottom: 0.35rem; }
+    .teach-card p { margin: 0; font-size: 14.5px; color: var(--cream); }
+    .map-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    .map-cols .teach-card { margin: 0; }
+
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 1.25rem clamp(1.25rem, 4vw, 3rem) 2rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.5rem;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+    footer a { color: var(--paper); text-decoration: none; border-bottom: 1px solid var(--accent); }
+
+    .err {
+      position: fixed;
+      left: 12px; right: 12px; bottom: 12px;
+      z-index: 20;
+      background: #3a1212;
+      color: #ffd6d6;
+      padding: 12px 14px;
+      border-radius: 8px;
+      display: none;
+      white-space: pre-wrap;
+      font-family: var(--mono);
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    html.embed .hero,
+    html.embed .teachers,
+    html.embed footer { display: none; }
+    html.embed .specimen:first-of-type { border-top: none; }
+
+    @media (max-width: 860px) {
+      .hero {
+        grid-template-columns: 1fr;
+        min-height: auto;
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+      }
+      .hero h1 { max-width: none; }
+      .specimen, .centerpiece .placard, .teachers, .map-cols {
+        grid-template-columns: 1fr;
+      }
+      .placard { border-left: none; border-top: 1px solid var(--line); }
+      .centerpiece .views { grid-template-columns: 1fr; }
+      .centerpiece .view-pane { border-right: none; border-bottom: 1px solid var(--line); min-height: 42vh; }
+      .view, .view-wrap { min-height: 42vh; }
+      .specimen { min-height: auto; }
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="err" id="err"></div>
+
+  <div class="content">
+    <header class="hero" id="top">
+      <div>
+        <p class="hero-kicker">Technique exhibit · Education · Virgil Renfroe</p>
+        <h1>Soft <em>Matter</em> Lab</h1>
+        <p class="hero-sub">A waves, cloth, and flow lab for shop class and intro physics. Watch what moves — and what stays.</p>
+        <div class="hero-meta">
+          <div>Audience <span>HS / intro college</span></div>
+          <div>Stack <span>three.js · one WebGL context</span></div>
+          <div>Core lesson <span>Energy moves · matter may stay</span></div>
+        </div>
+      </div>
+      <aside class="hero-aside">
+        <div class="hero-diagram" aria-label="Lesson map">
+          <h2>What you will see</h2>
+          <div class="diagram-rows">
+            <div><b>Wave</b><span>The crest travels. The float stays on its mast.</span></div>
+            <div><b>Cloth</b><span>One pull. Neighbors share the tension.</span></div>
+            <div><b>Flow</b><span>The ink itself is carried downstream.</span></div>
+            <div><b>Soft</b><span>The shape changes. The body stays one piece.</span></div>
+            <div><b>Medium</b><span>The stuff a wave moves through.</span></div>
+          </div>
+        </div>
+        <p class="scroll-cue"><a href="#s01">Enter the lab ↓</a></p>
+      </aside>
+    </header>
+
+    <!-- SPECIMEN 01 Wave basin -->
+    <section class="specimen" id="s01">
+      <div class="view-wrap">
+        <div class="view-label">Crest travels · float stays</div>
+        <div class="view" data-scene="wave" tabindex="0" aria-label="Wave basin specimen viewport"></div>
+      </div>
+      <aside class="placard">
+        <p class="specimen-num">Specimen 01 — Wave basin</p>
+        <h2 class="specimen-title">The crest travels. The water stays.</h2>
+        <p class="notice">Note — energy crosses the tank. The colored floats do not.</p>
+        <div class="lesson">
+          <p>A traveling wave carries energy from the orange paddle to the far wall.</p>
+          <p>The water under a crest mostly moves up and down.</p>
+          <p>Each float is a bit of material on a fixed mast. A float near the paddle crests before a float downstream.</p>
+          <p>A stone makes a ring. The ring spreads. The floats still stay on their masts.</p>
+        </div>
+        <div class="try">
+          <strong>Try this</strong>
+          <p>Watch the gold float, then the blue one. Which crests first? Click the water to drop a stone. The ring moves. The float does not slide along its mast.</p>
+        </div>
+        <div class="chips" role="group" aria-label="Wave driver">
+          <button type="button" class="chip" data-wave="continuous" aria-pressed="true">Continuous</button>
+          <button type="button" class="chip" data-wave="pulse" aria-pressed="false">Single pulse</button>
+          <button type="button" class="chip" id="wave-drop">Drop stone</button>
+        </div>
+        <div class="ctrls">
+          <label class="ctrl">Amplitude
+            <input id="wave-amp" type="range" min="0" max="0.36" step="0.01" value="0.16" />
+            <output id="wave-amp-out" for="wave-amp">0.16</output>
+          </label>
+          <label class="ctrl">Tempo
+            <input id="wave-tempo" type="range" min="0.45" max="1.7" step="0.01" value="0.9" />
+            <output id="wave-tempo-out" for="wave-tempo">0.90</output>
+          </label>
+          <label class="ctrl">Damping
+            <input id="wave-damp" type="range" min="0" max="1" step="0.01" value="0.22" />
+            <output id="wave-damp-out" for="wave-damp">0.22</output>
+          </label>
+        </div>
+      </aside>
+    </section>
+
+    <!-- SPECIMEN 02 Cloth -->
+    <section class="specimen" id="s02">
+      <div class="view-wrap">
+        <div class="view-label">Neighbors share the pull</div>
+        <div class="view mode-pull" data-scene="cloth" tabindex="0" aria-label="Cloth specimen viewport"></div>
+      </div>
+      <aside class="placard">
+        <p class="specimen-num">Specimen 02 — Cloth</p>
+        <h2 class="specimen-title">The sheet shares the tension.</h2>
+        <p class="notice">Note — pull one stitch. The threads around it take the load.</p>
+        <div class="lesson">
+          <p>The cloth is a grid of points tied to their neighbors.</p>
+          <p>A force at one point becomes a curve across the sheet. That shared pull is tension.</p>
+          <p>The colored stitches are material. They stay in the weave. They move because the weave pulls them.</p>
+          <p>Wind is a push spread over the whole cloth. The sheet bows together.</p>
+        </div>
+        <div class="try">
+          <strong>Try this</strong>
+          <p>Drag the lower cloth. Watch the tug climb toward the rod. Then raise wind, or hit Gust. The colored stitches move as one piece, not one thread at a time.</p>
+        </div>
+        <div class="chips" role="group" aria-label="Cloth pointer mode">
+          <button type="button" class="chip" data-cloth-mode="pull" aria-pressed="true">Pull</button>
+          <button type="button" class="chip" data-cloth-mode="orbit" aria-pressed="false">Orbit</button>
+          <button type="button" class="chip" id="cloth-gust">Gust</button>
+          <button type="button" class="chip" id="cloth-reset">Reset</button>
+        </div>
+        <div class="ctrls">
+          <label class="ctrl">Wind
+            <input id="cloth-wind" type="range" min="0" max="1.4" step="0.01" value="0.48" />
+            <output id="cloth-wind-out" for="cloth-wind">0.48</output>
+          </label>
+          <label class="ctrl">Stiffness
+            <input id="cloth-stiff" type="range" min="0.2" max="1" step="0.01" value="0.78" />
+            <output id="cloth-stiff-out" for="cloth-stiff">0.78</output>
+          </label>
+          <label class="ctrl">Damping
+            <input id="cloth-damp" type="range" min="0.9" max="0.995" step="0.001" value="0.972" />
+            <output id="cloth-damp-out" for="cloth-damp">0.97</output>
+          </label>
+        </div>
+      </aside>
+    </section>
+
+    <!-- SPECIMEN 03 Flow -->
+    <section class="specimen" id="s03">
+      <div class="view-wrap">
+        <div class="view-label">Ink is carried</div>
+        <div class="view" data-scene="flow" tabindex="0" aria-label="Flow specimen viewport"></div>
+      </div>
+      <aside class="placard">
+        <p class="specimen-num">Specimen 03 — Flow</p>
+        <h2 class="specimen-title">Here the material moves.</h2>
+        <p class="notice">Note — unlike the floats, each drop travels with the current.</p>
+        <div class="lesson">
+          <p>In the wave tank, the floats stayed on their masts.</p>
+          <p>Here the ink is the material, and the current takes it downstream.</p>
+          <p>The clay post splits the stream. Lanes go around and meet again.</p>
+          <p>Slow the speed to zero and the ink stops. A wave crest would not.</p>
+        </div>
+        <div class="try">
+          <strong>Try this</strong>
+          <p>Follow one large drop from the left, around the post, and off the right. Add swirl. Then set speed to zero and scroll back to the basin. What moved there? What moves here?</p>
+        </div>
+        <div class="chips" role="group" aria-label="Flow actions">
+          <button type="button" class="chip" id="flow-reset">Reset ink</button>
+        </div>
+        <div class="ctrls">
+          <label class="ctrl">Speed
+            <input id="flow-speed" type="range" min="0" max="1.4" step="0.01" value="0.72" />
+            <output id="flow-speed-out" for="flow-speed">0.72</output>
+          </label>
+          <label class="ctrl">Swirl
+            <input id="flow-swirl" type="range" min="0" max="1" step="0.01" value="0.22" />
+            <output id="flow-swirl-out" for="flow-swirl">0.22</output>
+          </label>
+        </div>
+      </aside>
+    </section>
+
+    <!-- CENTERPIECE -->
+    <section class="specimen centerpiece" id="s04">
+      <div class="views">
+        <div class="view-pane">
+          <div class="view-label">Wave · material stays</div>
+          <div class="view" data-scene="compare-wave" tabindex="0" aria-label="Wave side of comparison"></div>
+        </div>
+        <div class="view-pane">
+          <div class="view-label">Cloth · tension shares</div>
+          <div class="view" data-scene="compare-cloth" tabindex="0" aria-label="Cloth side of comparison"></div>
+        </div>
+      </div>
+      <aside class="placard">
+        <div>
+          <p class="specimen-num">Specimen 04 — Centerpiece</p>
+          <h2 class="specimen-title">Same question. Two soft bodies.</h2>
+          <p class="notice">Note — left, the crest moves. Right, the load spreads.</p>
+          <div class="lesson">
+            <p>Left: a crest runs the basin. The floats bob in place.</p>
+            <p>Right: wind loads the cloth. Neighbors share it.</p>
+            <p>Neither body is rigid. Both keep their material connected.</p>
+            <p>Soft matter is this: the shape changes, and the piece stays one piece.</p>
+          </div>
+        </div>
+        <div>
+          <div class="try">
+            <strong>Try this</strong>
+            <p>Watch for ten seconds without touching. Name what travels on the left, and what stretches on the right. Then orbit either view.</p>
+          </div>
+          <div class="ctrls" style="margin-top:1rem">
+            <label class="ctrl">Drivers
+              <input id="cmp-drive" type="range" min="0" max="1" step="1" value="1" />
+              <output id="cmp-drive-out" for="cmp-drive">ON</output>
+            </label>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="teachers" id="teachers">
+      <div>
+        <h2>For teachers</h2>
+        <p class="lede">Short objectives, one classroom loop, and how the lab maps to shop practice and intro physics.</p>
+      </div>
+      <div class="teach-grid">
+        <div class="teach-card">
+          <h3>Learning objectives</h3>
+          <ul>
+            <li>Say that a traveling wave moves energy while the medium oscillates in place.</li>
+            <li>Point to a float and show that it does not travel with the crest.</li>
+            <li>Explain tension as a pull shared by neighboring parts of a cloth.</li>
+            <li>Contrast flow, which carries material, with a wave, which does not.</li>
+          </ul>
+        </div>
+        <div class="teach-card">
+          <h3>10-minute classroom activity</h3>
+          <p>1) Specimen 01: pick one float. Does it cross the tank? 2) Drop a stone and sketch the ring. 3) Specimen 02: drag once and name what the neighbors do. 4) Specimen 03: follow one ink drop. Write one sentence on how flow differs from the wave.</p>
+        </div>
+        <div class="map-cols">
+          <div class="teach-card">
+            <h3>Shop &amp; continuum map</h3>
+            <p>Ripple tanks, flags and shade cloth, wind on a loose cover, ink in a flume. Useful before anyone says “partial differential equation.”</p>
+          </div>
+          <div class="teach-card">
+            <h3>Intro physics map</h3>
+            <p>Transverse waves, wavelength and tempo, damping, tension in a membrane, advection versus wave motion.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div>Soft Matter Lab · Virgil Renfroe · Education exhibit</div>
+      <div><a href="#top">Back to top</a></div>
+    </footer>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
