@@ -459,7 +459,7 @@ class SoftCloth {
     const markerColors = [0xff5a1f, 0x7ec8ff, 0xc8f542];
     for (let m = 0; m < markerIdx.length; m++) {
       const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.045, 14, 10),
+        new THREE.SphereGeometry(0.058, 14, 10),
         new THREE.MeshStandardMaterial({
           color: markerColors[m],
           emissive: markerColors[m],
@@ -691,12 +691,12 @@ const basin = new WaveBasin(waveCols, waveRows, waveW, waveD);
 
 const waveScene = makeScene(document.querySelector('[data-scene="wave"]'), {
   bg: 0x101614,
-  px: 0.15,
-  py: 2.25,
-  pz: 2.65,
+  px: 0.95,
+  py: 1.62,
+  pz: 2.35,
   tx: 0,
-  ty: -0.05,
-  tz: 0,
+  ty: -0.02,
+  tz: -0.05,
   fov: 38,
   minDist: 1.8,
   maxDist: 7,
@@ -708,27 +708,27 @@ const paddleMat = new THREE.MeshStandardMaterial({ color: 0xff5a1f, roughness: 0
 const paddle = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.28, waveD * 0.62), paddleMat);
 paddle.position.set(-waveW / 2 + 0.16, -0.02, 0);
 waveScene.add(paddle);
-const waveFloats = addFloats(waveScene, [-1.35, -0.68, 0.0, 0.68, 1.35], 0.02, 0.075);
+const waveFloats = addFloats(waveScene, [-1.35, -0.68, 0.0, 0.68, 1.35], 0.02, 0.095);
 basin.write(0.16);
 
 const clothNX = narrowAtStart ? 14 : 22;
 const clothNY = narrowAtStart ? 10 : 15;
 const cloth = new SoftCloth(clothNX, clothNY, 2.05, 2.28, 1.08);
 for (let i = 0; i < 100; i++) {
-  cloth.step(1 / 60, { wind: 0.48, stiff: 0.82, damp: 0.9, flutter: false, time: i / 60 });
+  cloth.step(1 / 60, { wind: 0.62, stiff: 0.82, damp: 0.9, flutter: false, time: i / 60 });
 }
 cloth.sync();
 
 const clothScene = makeScene(document.querySelector('[data-scene="cloth"]'), {
   bg: 0x14110e,
-  px: 0.1,
-  py: 0.15,
-  pz: 3.55,
+  px: 1.72,
+  py: 0.62,
+  pz: 2.28,
   tx: 0,
-  ty: -0.12,
-  tz: 0.15,
+  ty: -0.18,
+  tz: 0.38,
   fov: 38,
-  minDist: 2.1,
+  minDist: 1.7,
   maxDist: 7.5,
 });
 clothScene.userData.controls.enabled = false;
@@ -805,7 +805,7 @@ flowGeo.setAttribute('color', new THREE.BufferAttribute(flowColors, 3));
 const points = new THREE.Points(
   flowGeo,
   new THREE.PointsMaterial({
-    size: narrowAtStart ? 0.085 : 0.062,
+    size: narrowAtStart ? 0.11 : 0.078,
     map: circleTexture(),
     vertexColors: true,
     transparent: true,
@@ -822,7 +822,7 @@ const tracers = [];
 for (let i = 0; i < tracerCount; i++) {
   const color = inkColors[i];
   const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.075, 16, 12),
+    new THREE.SphereGeometry(0.095, 16, 12),
     new THREE.MeshStandardMaterial({
       color,
       emissive: color,
@@ -843,9 +843,9 @@ const cmpWave = new WaveBasin(narrowAtStart ? 36 : 52, narrowAtStart ? 20 : 28, 
 cmpWave.phase = 0.8;
 const cmpWaveScene = makeScene(document.querySelector('[data-scene="compare-wave"]'), {
   bg: 0x12110e,
-  px: 0.2,
-  py: 2.15,
-  pz: 2.7,
+  px: 0.85,
+  py: 1.7,
+  pz: 2.45,
   fov: 40,
   minDist: 1.8,
   maxDist: 7,
@@ -866,13 +866,13 @@ for (let i = 0; i < 80; i++) {
 cmpCloth.sync();
 const cmpClothScene = makeScene(document.querySelector('[data-scene="compare-cloth"]'), {
   bg: 0x12110e,
-  px: 0.05,
-  py: 0.05,
-  pz: 3.15,
-  ty: -0.1,
-  tz: 0.1,
+  px: 1.35,
+  py: 0.48,
+  pz: 2.05,
+  ty: -0.12,
+  tz: 0.28,
   fov: 40,
-  minDist: 1.8,
+  minDist: 1.6,
   maxDist: 7,
 });
 addKeyLight(cmpClothScene, 0xffe6d0, 2.4);
@@ -890,7 +890,7 @@ const ui = {
   waveTempo: 0.9,
   waveDamp: 0.22,
   waveDrive: true,
-  clothWind: 0.48,
+  clothWind: 0.62,
   clothStiff: 0.78,
   clothDamp: 0.972,
   clothMode: 'pull',
@@ -1041,7 +1041,8 @@ syncDrive();
 function placeFloats(floats, field, amp) {
   for (const f of floats) {
     const y = field.heightAt(f.x, f.z, amp);
-    f.mesh.position.y = y + 0.075;
+    const radius = f.mesh.geometry.parameters?.radius ?? 0.08;
+    f.mesh.position.y = y + radius;
   }
 }
 
