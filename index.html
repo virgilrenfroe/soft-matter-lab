@@ -163,7 +163,7 @@
       padding: 6.5rem 4vw 2.5rem;
       display: grid;
       grid-template-columns: 1.35fr 0.75fr;
-      grid-template-rows: 1fr auto;
+      grid-template-rows: minmax(0, 1fr) auto;
       gap: 1.5rem 2vw;
       position: relative;
       align-items: end;
@@ -255,11 +255,11 @@
       padding: 1rem 0 0;
       position: relative;
       z-index: 1;
-      align-self: start;
-      padding-top: 4vh;
+      align-self: stretch;
+      padding-top: 0.5rem;
       display: grid;
-      gap: 0.45rem;
-      max-height: calc(100svh - 8rem);
+      gap: 0.32rem;
+      max-height: 100%;
       overflow: auto;
       scrollbar-width: thin;
       grid-column: 2;
