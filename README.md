@@ -1,6 +1,6 @@
 # Soft Matter Lab
 
-A waves, cloth, flow, surface-tension, soft-body, and buoyancy lab for shop class and intro physics — by Virgil Renfroe.
+A waves, cloth, flow, surface-tension, soft-body, and fluids lab for shop class and intro physics — by Virgil Renfroe.
 
 GitHub Pages (same source, once enabled): https://virgilrenfroe.github.io/soft-matter-lab/  
 Repo: https://github.com/virgilrenfroe/soft-matter-lab
@@ -21,6 +21,8 @@ Railway is the live host. `Dockerfile`, `Caddyfile`, and `railway.toml` are read
 7. **Particle medium** — a pulse travels through a tray of beads. Each bead oscillates near its home mark. Click a bead to poke that site. Reduced motion and `?still=1` hold the tray quiet. A pulse or a poke still runs, because the student started it.
 
 **08. Buoyancy** — same-size blocks in one tank. Density decides float or sink. Buoyancy is the upward push from the fluid. Drop the blocks, or switch the tank from water to oil. With reduced motion or `?still=1`, the tank rests at float and sink. Press Drop and the fall still runs.
+
+**09. Viscosity** — two matching balls drop from the same height. The left column stays thin. The right column follows a viscosity slider (or Thin / Syrup / Honey). Gravity is the same push; a thicker liquid resists the fall. With reduced motion or `?still=1`, the columns rest on that comparison. Press Drop and that one fall still runs.
 
 ## Local
 

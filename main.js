@@ -2327,6 +2327,428 @@ class BuoyLab {
     }
   }
 }
+/* ——— Viscosity: same drop, two columns ——— */
+
+class ViscosityLab {
+  constructor() {
+    this.radius = 0.125;
+    this.dropY = 2.36;
+    this.surface = 1.58;
+    this.floorY = 0.16;
+    this.g = 5.8;
+    this.dragK = 2.15;
+    this.muAir = 0.05;
+    this.muThin = 1;
+    this.mu = 14;
+    this.maxVy = 3.3;
+    this.xs = [-0.68, 0.68];
+    this.left = { y: this.dropY, vy: 0, prevY: this.dropY };
+    this.right = { y: this.dropY, vy: 0, prevY: this.dropY };
+    this.mode = 'hold';
+    this.timer = 0.4;
+    this.lag = -1;
+    this.userRun = false;
+    this.posed = false;
+    this.poseMu = -1;
+    this.splashes = [0, 0];
+    this.spins = [0, 0];
+    this.water = new THREE.Color(0x146e78);
+    this.honey = new THREE.Color(0xd4892a);
+    this.molasses = new THREE.Color(0x7a3d12);
+    this.waterSkin = new THREE.Color(0xd8fff6);
+    this.honeySkin = new THREE.Color(0xffe3b0);
+    this.glassCool = new THREE.Color(0xd5e6f0);
+    this.glassWarm = new THREE.Color(0xf0d2a4);
+    this.ice = new THREE.Color(0x8ec8ff);
+    this.signal = new THREE.Color(0xff9d2c);
+  }
+
+  setMu(mu) {
+    this.mu = mu;
+  }
+
+  drop() {
+    this.userRun = true;
+    this.posed = false;
+    this._placeTop();
+    this.mode = 'fall';
+    this.timer = 0;
+    this.lag = -1;
+  }
+
+  _placeTop() {
+    for (const b of [this.left, this.right]) {
+      b.y = this.dropY;
+      b.vy = 0;
+      b.prevY = this.dropY;
+    }
+    this.splashes[0] = 0;
+    this.splashes[1] = 0;
+  }
+
+  poseStill() {
+    const left = { y: this.dropY, vy: 0, prevY: this.dropY };
+    const right = { y: this.dropY, vy: 0, prevY: this.dropY };
+    const dt = 1 / 90;
+    let extra = 0;
+    for (let i = 0; i < 90 * 14; i++) {
+      this._push(left, this.muThin, dt);
+      this._push(right, this.mu, dt);
+      if (left.y <= this.floorY + 1e-4 && left.vy === 0) {
+        extra += dt;
+        if (extra >= 1.7) break;
+      }
+    }
+    this.left.y = left.y;
+    this.left.vy = 0;
+    this.left.prevY = left.y;
+    this.right.y = right.y;
+    this.right.vy = 0;
+    this.right.prevY = right.y;
+    this.mode = 'rest';
+    this.timer = 1;
+    this.splashes[0] = 0;
+    this.splashes[1] = 0;
+    this.posed = true;
+    this.poseMu = this.mu;
+  }
+
+  step(dt, motion) {
+    const h = Math.min(Math.max(dt, 0), 0.05);
+    if (this.mode === 'hold') {
+      this._placeTop();
+      this.timer -= h;
+      if (this.timer <= 0) {
+        this.mode = 'fall';
+        this.lag = -1;
+      }
+      return;
+    }
+    if (this.mode === 'rest') {
+      this.timer -= h;
+      if (this.timer > 0) return;
+      if (!motion) {
+        this.userRun = false;
+        this.posed = true;
+        this.poseMu = this.mu;
+        this.timer = 1;
+        return;
+      }
+      this._placeTop();
+      this.mode = 'hold';
+      this.timer = 0.48;
+      this.userRun = false;
+      return;
+    }
+    const prevL = this.left.y;
+    const prevR = this.right.y;
+    let left = h;
+    while (left > 1e-5) {
+      const s = Math.min(0.008, left);
+      this._push(this.left, this.muThin, s);
+      this._push(this.right, this.mu, s);
+      left -= s;
+    }
+    this._splash(this.left, 0, prevL);
+    this._splash(this.right, 1, prevR);
+    const leftDown = this.left.y <= this.floorY + 1e-3;
+    const rightDown = this.right.y <= this.floorY + 1e-3;
+    if (leftDown && rightDown) {
+      this.mode = 'rest';
+      this.timer = 1.25;
+      this.lag = -1;
+    } else if (leftDown) {
+      if (this.lag < 0) this.lag = 0;
+      this.lag += h;
+      if (this.lag > 2.55) {
+        this.mode = 'rest';
+        this.timer = 1.15;
+      }
+    } else {
+      this.lag = -1;
+    }
+  }
+
+  _muAt(ball, muLiquid) {
+    const bot = ball.y - this.radius;
+    const top = ball.y + this.radius;
+    if (bot >= this.surface) return this.muAir;
+    if (top <= this.surface) return muLiquid;
+    const frac = (this.surface - bot) / (this.radius * 2);
+    const clamped = Math.max(0, Math.min(1, frac));
+    return this.muAir + (muLiquid - this.muAir) * clamped;
+  }
+
+  _push(ball, muLiquid, h) {
+    const drag = Math.max(0.02, this.dragK * this._muAt(ball, muLiquid));
+    const vInf = -this.g / drag;
+    const decay = Math.exp(-drag * h);
+    ball.vy = vInf + (ball.vy - vInf) * decay;
+    if (ball.vy < -this.maxVy) ball.vy = -this.maxVy;
+    ball.y += ball.vy * h;
+    if (ball.y < this.floorY) {
+      ball.y = this.floorY;
+      ball.vy = 0;
+    }
+    if (ball.y > this.dropY) {
+      ball.y = this.dropY;
+      if (ball.vy > 0) ball.vy = 0;
+    }
+  }
+
+  _splash(ball, index, prevY) {
+    const r = this.radius;
+    const crossed = prevY - r >= this.surface && ball.y - r < this.surface && ball.vy < 0;
+    ball.prevY = ball.y;
+    if (crossed) this.splashes[index] = 1;
+  }
+
+  mount(scene) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6d4b32, roughness: 0.68, metalness: 0.05 });
+    const r = 0.4;
+    const glassH = 2.02;
+    const glassY = glassH / 2;
+
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(2.55, 48),
+      new THREE.MeshStandardMaterial({ color: 0x14120f, roughness: 0.96, metalness: 0.02, envMapIntensity: 0.25 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.28;
+    scene.add(ground);
+
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.14, 1.22), wood);
+    plinth.position.y = -0.12;
+    scene.add(plinth);
+    const pad = new THREE.Mesh(
+      new THREE.BoxGeometry(2.28, 0.05, 1.02),
+      new THREE.MeshStandardMaterial({ color: 0x1a2428, roughness: 0.88, metalness: 0.06 })
+    );
+    pad.position.y = -0.02;
+    scene.add(pad);
+
+    const pegMat = new THREE.MeshStandardMaterial({
+      color: 0xff9d2c,
+      emissive: 0xff9d2c,
+      emissiveIntensity: 0.4,
+      roughness: 0.42,
+    });
+    const pegGeo = new THREE.BoxGeometry(0.1, 0.018, 0.018);
+    for (const x of this.xs) {
+      const peg = new THREE.Mesh(pegGeo, pegMat);
+      peg.position.set(x < 0 ? x - r - 0.02 : x + r + 0.02, this.dropY, 0);
+      scene.add(peg);
+    }
+
+    const tickMat = new THREE.MeshStandardMaterial({ color: 0xf4efe6, roughness: 0.45, metalness: 0.08 });
+    const tickGeo = new THREE.BoxGeometry(0.11, 0.012, 0.012);
+    for (const x of this.xs) {
+      for (const y of [0.36, 0.72, 1.08, 1.44]) {
+        const tick = new THREE.Mesh(tickGeo, tickMat);
+        tick.position.set(x, y, r + 0.012);
+        scene.add(tick);
+      }
+    }
+
+    const makeColumn = (x, liquidColor, skinColor, glassColor, opacity) => {
+      const backMat = new THREE.MeshStandardMaterial({
+        color: liquidColor.clone().multiplyScalar(0.55),
+        roughness: 0.62,
+        metalness: 0.04,
+        side: THREE.DoubleSide,
+      });
+      const back = new THREE.Mesh(
+        new THREE.CylinderGeometry(r * 0.78, r * 0.78, this.surface, 28, 1, true, Math.PI, Math.PI),
+        backMat
+      );
+      back.position.set(x, this.surface / 2, 0);
+      scene.add(back);
+
+      const liquidMat = new THREE.MeshStandardMaterial({
+        color: liquidColor.clone(),
+        transparent: true,
+        opacity,
+        roughness: 0.08,
+        metalness: 0.06,
+        envMapIntensity: 0.85,
+        depthWrite: false,
+      });
+      const liquid = new THREE.Mesh(
+        new THREE.CylinderGeometry(r * 0.9, r * 0.9, this.surface, 40, 1, true),
+        liquidMat
+      );
+      liquid.position.set(x, this.surface / 2, 0);
+      liquid.renderOrder = 2;
+      scene.add(liquid);
+
+      const skinMat = new THREE.MeshStandardMaterial({
+        color: skinColor.clone(),
+        emissive: skinColor.clone(),
+        emissiveIntensity: 0.42,
+        transparent: true,
+        opacity: 0.78,
+        roughness: 0.08,
+        metalness: 0.12,
+        envMapIntensity: 1,
+        depthWrite: false,
+      });
+      const skin = new THREE.Mesh(new THREE.CircleGeometry(r * 0.9, 40), skinMat);
+      skin.rotation.x = -Math.PI / 2;
+      skin.position.set(x, this.surface + 0.012, 0);
+      skin.renderOrder = 3;
+      scene.add(skin);
+
+      const glassMat = new THREE.MeshStandardMaterial({
+        color: glassColor.clone(),
+        transparent: true,
+        opacity: 0.14,
+        roughness: 0.05,
+        metalness: 0.12,
+        envMapIntensity: 1.2,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const glass = new THREE.Mesh(
+        new THREE.CylinderGeometry(r, r, glassH, 40, 1, true),
+        glassMat
+      );
+      glass.position.set(x, glassY, 0);
+      glass.renderOrder = 4;
+      scene.add(glass);
+
+      const rim = new THREE.Mesh(
+        new THREE.TorusGeometry(r, 0.018, 8, 40),
+        wood
+      );
+      rim.rotation.x = Math.PI / 2;
+      rim.position.set(x, glassH, 0);
+      scene.add(rim);
+
+      const foot = new THREE.Mesh(
+        new THREE.CylinderGeometry(r + 0.04, r + 0.06, 0.06, 32),
+        wood
+      );
+      foot.position.set(x, 0.02, 0);
+      scene.add(foot);
+
+      const innerFloor = new THREE.Mesh(
+        new THREE.CircleGeometry(r * 0.86, 28),
+        new THREE.MeshStandardMaterial({ color: 0x102024, roughness: 0.9, metalness: 0.04 })
+      );
+      innerFloor.rotation.x = -Math.PI / 2;
+      innerFloor.position.set(x, 0.055, 0);
+      scene.add(innerFloor);
+
+      return { backMat, liquidMat, skinMat, glassMat, skin };
+    };
+
+    this.leftCol = makeColumn(this.xs[0], this.water, this.waterSkin, this.glassCool, 0.32);
+    this.rightCol = makeColumn(this.xs[1], this.honey, this.honeySkin, this.glassWarm, 0.52);
+
+    const ballGeo = new THREE.SphereGeometry(this.radius, 32, 24);
+    const ballMat = new THREE.MeshStandardMaterial({
+      color: 0xffc56a,
+      emissive: 0xff9d2c,
+      emissiveIntensity: 0.42,
+      roughness: 0.34,
+      metalness: 0.48,
+      envMapIntensity: 1.05,
+    });
+    const bandGeo = new THREE.TorusGeometry(this.radius * 0.92, 0.02, 8, 28);
+    const bandMat = new THREE.MeshStandardMaterial({
+      color: 0x1c140e,
+      roughness: 0.55,
+      metalness: 0.2,
+    });
+    this.balls = [];
+    for (let i = 0; i < 2; i++) {
+      const ball = new THREE.Mesh(ballGeo, ballMat);
+      const band = new THREE.Mesh(bandGeo, bandMat);
+      band.rotation.x = Math.PI / 2;
+      ball.add(band);
+      scene.add(ball);
+      this.balls.push(ball);
+    }
+
+    const splashGeo = new THREE.TorusGeometry(r * 0.55, 0.012, 6, 28);
+    const splashMatA = new THREE.MeshStandardMaterial({
+      color: 0xd8fff6,
+      emissive: 0x8ec8ff,
+      emissiveIntensity: 0.6,
+      transparent: true,
+      opacity: 0,
+      roughness: 0.3,
+      depthWrite: false,
+    });
+    const splashMatB = splashMatA.clone();
+    splashMatB.color.set(0xffe3b0);
+    splashMatB.emissive.set(0xff9d2c);
+    this.splashMeshes = [];
+    this.splashMats = [splashMatA, splashMatB];
+    for (let i = 0; i < 2; i++) {
+      const ring = new THREE.Mesh(splashGeo, this.splashMats[i]);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(this.xs[i], this.surface + 0.02, 0);
+      ring.renderOrder = 6;
+      ring.visible = false;
+      scene.add(ring);
+      this.splashMeshes.push(ring);
+    }
+
+    this.sync(0, 0, false);
+    return this;
+  }
+
+  _thickT() {
+    return Math.min(1, Math.max(0, (this.mu - 1) / 15));
+  }
+
+  paint() {
+    const t = this._thickT();
+    const col = this.rightCol;
+    col.liquidMat.color.copy(this.water).lerp(this.honey, Math.min(1, t * 1.25));
+    if (t > 0.62) col.liquidMat.color.lerp(this.molasses, (t - 0.62) / 0.38);
+    col.liquidMat.opacity = 0.24 + t * 0.14;
+    col.backMat.color.copy(col.liquidMat.color).multiplyScalar(0.52);
+    col.skinMat.color.copy(this.waterSkin).lerp(this.honeySkin, t);
+    col.skinMat.emissive.copy(col.skinMat.color);
+    col.glassMat.color.copy(this.glassCool).lerp(this.glassWarm, t);
+    col.glassMat.opacity = 0.13 + t * 0.08;
+    this.splashMats[1].color.copy(col.skinMat.color);
+    this.splashMats[1].emissive.copy(t > 0.35 ? this.signal : this.ice);
+  }
+
+  sync(time, dt, motion) {
+    this.paint();
+    const t = this._thickT();
+    const calm = 1 + t * 4;
+    const bodies = [this.left, this.right];
+    for (let i = 0; i < 2; i++) {
+      const body = bodies[i];
+      const mesh = this.balls[i];
+      mesh.position.set(this.xs[i], body.y, 0);
+      this.spins[i] += Math.max(0, -body.vy) * dt * 3.2;
+      mesh.rotation.z = this.spins[i];
+      const life = this.splashes[i];
+      if (life > 0) this.splashes[i] = Math.max(0, life - dt * 0.9);
+      const ring = this.splashMeshes[i];
+      const show = this.splashes[i] > 0.02;
+      ring.visible = show;
+      if (show) {
+        const k = 1 - this.splashes[i];
+        const s = 0.35 + k * 1.15;
+        ring.scale.set(s, s, s);
+        this.splashMats[i].opacity = this.splashes[i] * 0.85;
+      }
+      const wobbleAmp = motion ? 0.007 / (i === 0 ? 1 : calm) : 0;
+      const wobbleRate = i === 0 ? 3.6 : 3.2 / (1 + t * 2);
+      const skin = i === 0 ? this.leftCol.skin : this.rightCol.skin;
+      skin.position.y = this.surface + 0.012 + Math.sin(time * wobbleRate + i) * wobbleAmp;
+      const pulse = motion ? 0.4 + Math.sin(time * wobbleRate) * (0.08 / (i === 0 ? 1 : calm)) : 0.36;
+      skin.material.emissiveIntensity = pulse;
+    }
+  }
+}
 /* ——— Build specimens ——— */
 
 const waveCols = narrowAtStart ? 40 : 68;
@@ -2709,6 +3131,47 @@ const buoyFill = new THREE.DirectionalLight(0xffe2b0, 0.35);
 buoyFill.position.set(1.2, 0.4, 2.4);
 buoyScene.add(buoyFill);
 buoy.mount(buoyScene);
+const visc = new ViscosityLab();
+const viscScene = makeScene(document.querySelector('[data-scene="visc"]'), {
+  bg: 0x12110e,
+  px: -0.2,
+  py: 1.42,
+  pz: 4.7,
+  tx: 0.38,
+  ty: 1.16,
+  tz: 0,
+  fov: 32,
+  minDist: 3.1,
+  maxDist: 7.6,
+});
+viscScene.userData.controls.minPolarAngle = 0.38;
+viscScene.userData.controls.maxPolarAngle = 1.22;
+let viscStacked = null;
+function frameVisc() {
+  const stacked = window.innerWidth <= 860;
+  if (stacked === viscStacked) return;
+  viscStacked = stacked;
+  const controls = viscScene.userData.controls;
+  const cam = viscScene.userData.camera;
+  if (stacked) {
+    controls.target.set(0, 1.2, 0);
+    cam.position.set(0.02, 1.55, 5.7);
+  } else {
+    controls.target.set(1.05, 1.18, 0);
+    cam.position.set(0.05, 1.48, 4.95);
+  }
+  controls.update();
+}
+frameVisc();
+window.addEventListener('resize', frameVisc);
+addKeyLight(viscScene, 0xfff1e4, 2.7);
+const viscRim = new THREE.DirectionalLight(0x8ec8ff, 0.9);
+viscRim.position.set(-2.6, 2.8, 1.6);
+viscScene.add(viscRim);
+const viscFill = new THREE.DirectionalLight(0xffe2b0, 0.38);
+viscFill.position.set(1.8, 0.6, 2.2);
+viscScene.add(viscFill);
+visc.mount(viscScene);
 /* ——— UI state ——— */
 
 const ui = {
@@ -2736,6 +3199,7 @@ const ui = {
   mediumTempo: 0.7,
   buoyDen: 0.74,
   buoyFluid: 1,
+  viscMu: 14,
   drive: true,
 };
 
@@ -2833,6 +3297,30 @@ buoyEl.addEventListener('pointerup', (e) => {
   while (node && !node.userData.blockId) node = node.parent;
   if (!node || !node.userData.blockId) return;
   buoy.drop(node.userData.blockId);
+});
+bindRange('visc-mu', (v) => v.toFixed(1), (v) => {
+  ui.viscMu = v;
+  visc.setMu(v);
+  syncViscChips();
+});
+
+function syncViscChips() {
+  document.querySelectorAll('[data-visc]').forEach((b) => {
+    const on = Math.abs(ui.viscMu - Number(b.dataset.visc)) < 0.15;
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
+
+document.querySelectorAll('[data-visc]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const el = document.getElementById('visc-mu');
+    el.value = btn.dataset.visc;
+    el.dispatchEvent(new Event('input'));
+  });
+});
+
+document.getElementById('visc-drop').addEventListener('click', () => {
+  visc.drop();
 });
 
 function syncDropShapeChips() {
@@ -3249,6 +3737,16 @@ cmpClothScene.userData.update = (t, dt) => {
   cmpCloth.sync();
 };
 
+viscScene.userData.update = (t, dt) => {
+  const motion = motionOK();
+  if (!motion && !visc.userRun) {
+    if (!visc.posed || visc.poseMu !== visc.mu) visc.poseStill();
+  } else {
+    if (motion) visc.posed = false;
+    visc.step(dt, motion);
+  }
+  visc.sync(t, dt, motion && visc.mode !== 'rest');
+};
 dropScene.userData.update = (t, dt) => {
   const motion = motionOK();
   if (motion && drop.grab < 0) {
@@ -3373,6 +3871,7 @@ window.__SML = {
   jelly,
   medium,
   buoy,
+  visc,
   ui,
   get frameCount() { return frameCount; },
   get reducedMotion() { return reducedMotion; },
