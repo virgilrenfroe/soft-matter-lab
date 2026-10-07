@@ -2749,6 +2749,254 @@ class ViscosityLab {
     }
   }
 }
+/* ——— Capillary: narrower opening climbs higher ——— */
+
+class CapillaryLab {
+  constructor() {
+    this.surface = 0.36;
+    this.hNarrow = 1.22;
+    this.bore = 0.062;
+    this.wall = 0.016;
+    this.wideW = 4;
+    this.narrowW = 1;
+    this.width = 2.2;
+    this.glassH = 1.8;
+    this.glassBase = 0.05;
+    this.xs = [-0.9, 0, 0.9];
+    this.heights = [0.012, 0.012, 0.012];
+    this.mode = 'hold';
+    this.timer = 0.42;
+    this.elapsed = 0;
+    this.userRun = false;
+    this.posed = false;
+    this.poseWidth = -1;
+    this.rate = 2.15;
+  }
+
+  setWidth(width) {
+    this.width = Math.min(4, Math.max(1, width));
+  }
+
+  climb() {
+    this.userRun = true;
+    this.posed = false;
+    this.mode = 'rise';
+    this.elapsed = 0;
+    this.heights[0] = 0.012;
+    this.heights[1] = 0.012;
+    this.heights[2] = 0.012;
+  }
+
+  specs() {
+    const widths = [this.wideW, this.width, this.narrowW];
+    return widths.map((w) => {
+      const inner = this.bore * w;
+      return {
+        w,
+        inner,
+        outer: inner + this.wall,
+        h: this.hNarrow / w,
+      };
+    });
+  }
+
+  poseStill() {
+    const specs = this.specs();
+    for (let i = 0; i < 3; i++) this.heights[i] = specs[i].h;
+    this.mode = 'rest';
+    this.userRun = false;
+    this.posed = true;
+    this.poseWidth = this.width;
+  }
+
+  step(dt) {
+    const h = Math.min(Math.max(dt, 0), 0.05);
+    if (this.mode === 'hold') {
+      this.heights[0] = 0.012;
+      this.heights[1] = 0.012;
+      this.heights[2] = 0.012;
+      this.timer -= h;
+      if (this.timer <= 0) this.mode = 'rise';
+      return;
+    }
+    if (this.mode !== 'rise') return;
+    const specs = this.specs();
+    let settled = true;
+    const k = 1 - Math.exp(-h * this.rate);
+    for (let i = 0; i < 3; i++) {
+      const target = specs[i].h;
+      this.heights[i] += (target - this.heights[i]) * k;
+      if (Math.abs(target - this.heights[i]) > 0.012) settled = false;
+    }
+    this.elapsed += h;
+    if ((settled && this.elapsed > 0.45) || this.elapsed > 4.4) {
+      for (let i = 0; i < 3; i++) this.heights[i] = specs[i].h;
+      this.mode = 'rest';
+      this.userRun = false;
+      this.posed = true;
+      this.poseWidth = this.width;
+    }
+  }
+
+  mount(scene) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6d4b32, roughness: 0.68, metalness: 0.05 });
+    const lipMat = new THREE.MeshStandardMaterial({
+      color: 0xd5dde6,
+      roughness: 0.28,
+      metalness: 0.82,
+      envMapIntensity: 1.1,
+    });
+    this.liquidMat = new THREE.MeshStandardMaterial({
+      color: 0x6ee7df,
+      emissive: 0x1eb8b2,
+      emissiveIntensity: 0.58,
+      roughness: 0.24,
+      metalness: 0.04,
+      envMapIntensity: 0.55,
+    });
+    const poolMat = this.liquidMat.clone();
+    poolMat.color.set(0x3ecfc8);
+    poolMat.emissive.set(0x149c98);
+    poolMat.emissiveIntensity = 0.42;
+    poolMat.roughness = 0.12;
+    poolMat.envMapIntensity = 0.9;
+    this.meniscusMat = new THREE.MeshStandardMaterial({
+      color: 0xe9fffb,
+      emissive: 0xb6fff6,
+      emissiveIntensity: 0.7,
+      roughness: 0.1,
+      metalness: 0.05,
+      envMapIntensity: 0.7,
+    });
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0xf4fbff,
+      transparent: true,
+      opacity: 0.16,
+      roughness: 0.04,
+      metalness: 0.08,
+      envMapIntensity: 1.15,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(2.7, 48),
+      new THREE.MeshStandardMaterial({ color: 0x14120f, roughness: 0.96, metalness: 0.02, envMapIntensity: 0.25 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.18;
+    scene.add(ground);
+
+    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.72, 1.8, 0.14, 40), wood);
+    plinth.position.y = -0.02;
+    scene.add(plinth);
+
+    const dishFloor = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.42, 1.42, 0.05, 40),
+      new THREE.MeshStandardMaterial({ color: 0x102226, roughness: 0.9, metalness: 0.04 })
+    );
+    dishFloor.position.y = 0.09;
+    scene.add(dishFloor);
+
+    const pool = new THREE.Mesh(new THREE.CylinderGeometry(1.36, 1.36, 0.24, 48), poolMat);
+    pool.position.y = 0.24;
+    scene.add(pool);
+
+    const dishGlass = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.48, 1.4, 0.42, 48, 1, true),
+      glassMat
+    );
+    dishGlass.position.y = 0.28;
+    dishGlass.renderOrder = 4;
+    scene.add(dishGlass);
+
+    const dishLip = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.028, 8, 48), lipMat);
+    dishLip.rotation.x = Math.PI / 2;
+    dishLip.position.y = 0.48;
+    scene.add(dishLip);
+
+    const tickMat = new THREE.MeshStandardMaterial({
+      color: 0xf4efe6,
+      emissive: 0xf4efe6,
+      emissiveIntensity: 0.18,
+      roughness: 0.4,
+      metalness: 0.08,
+    });
+    const tickGeo = new THREE.BoxGeometry(2.45, 0.012, 0.012);
+    for (const rise of [0.42, 0.78, 1.14]) {
+      const tick = new THREE.Mesh(tickGeo, tickMat);
+      tick.position.set(0, this.surface + rise, -0.58);
+      scene.add(tick);
+    }
+
+    const glassGeo = new THREE.CylinderGeometry(1, 1, this.glassH, 36, 1, true);
+    const liquidGeo = new THREE.CylinderGeometry(1, 1, 1,32);
+    const pts = [];
+    for (let i = 0; i <= 16; i++) {
+      const t = i / 16;
+      const r = 0.001 + t * 0.999;
+      const y = Math.cos((1 - t) * Math.PI * 0.5) - 1;
+      pts.push(new THREE.Vector2(r, y));
+    }
+    const meniscusGeo = new THREE.LatheGeometry(pts, 28);
+    const capGeo = new THREE.CircleGeometry(1, 28);
+    const lipGeo = new THREE.TorusGeometry(1, 0.055, 8, 28);
+    const glassY = this.glassBase + this.glassH / 2;
+    const lipY = this.glassBase + this.glassH;
+
+    this.tubes = [];
+    for (let i = 0; i < 3; i++) {
+      const group = new THREE.Group();
+      group.position.set(this.xs[i], 0, 0);
+      const glass = new THREE.Mesh(glassGeo, glassMat);
+      glass.position.y = glassY;
+      glass.renderOrder = 5;
+      group.add(glass);
+      const liquid = new THREE.Mesh(liquidGeo, this.liquidMat);
+      liquid.position.y = this.surface;
+      group.add(liquid);
+      const capDisc = new THREE.Mesh(capGeo, this.meniscusMat);
+      capDisc.rotation.x = -Math.PI / 2;
+      capDisc.position.y = this.surface;
+      group.add(capDisc);
+      const meniscus = new THREE.Mesh(meniscusGeo, this.meniscusMat);
+      meniscus.position.y = this.surface;
+      group.add(meniscus);
+      const lip = new THREE.Mesh(lipGeo, lipMat);
+      lip.rotation.x = Math.PI / 2;
+      lip.position.y = lipY;
+      group.add(lip);
+      scene.add(group);
+      this.tubes.push({ glass, liquid, capDisc, meniscus, lip, phase: i * 1.4 });
+    }
+
+    this.sync(0, false);
+    return this;
+  }
+
+  sync(time, motion) {
+    const specs = this.specs();
+    this.meniscusMat.emissiveIntensity = motion ? 0.48 + Math.sin(time * 2.2) * 0.08 : 0.46;
+    for (let i = 0; i < 3; i++) {
+      const spec = specs[i];
+      const h = this.heights[i];
+      const view = this.tubes[i];
+      const dipFull = spec.inner * 0.78;
+      const dip = Math.min(dipFull, Math.max(0.004, h * 0.82));
+      const colH = Math.max(0.012, h - dip * 0.16);
+      view.glass.scale.set(spec.outer, 1, spec.outer);
+      view.liquid.scale.set(spec.inner * 0.92, colH, spec.inner * 0.92);
+      view.liquid.position.y = this.surface + colH * 0.5;
+      const wob = motion ? Math.sin(time * 2.1 + view.phase) * 0.0035 : 0;
+      const top = this.surface + h + wob;
+      view.capDisc.scale.set(spec.inner * 0.9, spec.inner * 0.9, spec.inner * 0.9);
+      view.capDisc.position.y = top - dip * 0.35;
+      view.meniscus.scale.set(spec.inner * 0.98, dip, spec.inner * 0.98);
+      view.meniscus.position.y = top;
+      view.lip.scale.set(spec.outer, spec.outer, spec.outer);
+    }
+  }
+}
 /* ——— Build specimens ——— */
 
 const waveCols = narrowAtStart ? 40 : 68;
@@ -3172,6 +3420,47 @@ const viscFill = new THREE.DirectionalLight(0xffe2b0, 0.38);
 viscFill.position.set(1.8, 0.6, 2.2);
 viscScene.add(viscFill);
 visc.mount(viscScene);
+const cap = new CapillaryLab();
+const capScene = makeScene(document.querySelector('[data-scene="cap"]'), {
+  bg: 0x101418,
+  px: 0.2,
+  py: 1.16,
+  pz: 4.7,
+  tx: 1.05,
+  ty: 0.94,
+  tz: 0,
+  fov: 30,
+  minDist: 3.1,
+  maxDist: 7.4,
+});
+capScene.userData.controls.minPolarAngle = 1.02;
+capScene.userData.controls.maxPolarAngle = 1.56;
+let capStacked = null;
+function frameCap() {
+  const stacked = window.innerWidth <= 860;
+  if (stacked === capStacked) return;
+  capStacked = stacked;
+  const controls = capScene.userData.controls;
+  const cam = capScene.userData.camera;
+  if (stacked) {
+    controls.target.set(0, 0.7, 0);
+    cam.position.set(0.02, 0.76, 6.7);
+    cam.fov = 38;
+  } else {
+    controls.target.set(0.78, 1.02, 0);
+    cam.position.set(0.08, 1.12, 3.72);
+    cam.fov = 28;
+  }
+  cam.updateProjectionMatrix();
+  controls.update();
+}
+frameCap();
+window.addEventListener('resize', frameCap);
+capScene.add(new THREE.HemisphereLight(0xc5daf5, 0x3a2416, 1.35));
+const capPoint = new THREE.PointLight(0xffd2a4, 26, 14, 2);
+capPoint.position.set(1.2, 2.55, 2.4);
+capScene.add(capPoint);
+cap.mount(capScene);
 /* ——— UI state ——— */
 
 const ui = {
@@ -3200,6 +3489,7 @@ const ui = {
   buoyDen: 0.74,
   buoyFluid: 1,
   viscMu: 14,
+  capWidth: 2.2,
   drive: true,
 };
 
@@ -3322,6 +3612,38 @@ document.querySelectorAll('[data-visc]').forEach((btn) => {
 document.getElementById('visc-drop').addEventListener('click', () => {
   visc.drop();
 });
+bindRange('cap-width', (v) => v.toFixed(1), (v) => {
+  ui.capWidth = v;
+  const wasRest = cap.mode === 'rest';
+  cap.setWidth(v);
+  syncCapChips();
+  if (wasRest) cap.climb();
+});
+
+function syncCapChips() {
+  document.querySelectorAll('[data-cap]').forEach((b) => {
+    const on = Math.abs(ui.capWidth - Number(b.dataset.cap)) < 0.15;
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
+
+document.querySelectorAll('[data-cap]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const el = document.getElementById('cap-width');
+    el.value = btn.dataset.cap;
+    el.dispatchEvent(new Event('input'));
+    cap.climb();
+  });
+});
+
+document.getElementById('cap-climb').addEventListener('click', () => {
+  cap.climb();
+});
+
+if (!motionOK()) {
+  cap.poseStill();
+  cap.sync(0, false);
+}
 
 function syncDropShapeChips() {
   const bead = ui.dropWet < 0.34;
@@ -3747,6 +4069,15 @@ viscScene.userData.update = (t, dt) => {
   }
   visc.sync(t, dt, motion && visc.mode !== 'rest');
 };
+capScene.userData.update = (t, dt) => {
+  const motion = motionOK();
+  if (!motion && !cap.userRun) {
+    if (!cap.posed || cap.poseWidth !== cap.width) cap.poseStill();
+  } else {
+    cap.step(dt);
+  }
+  cap.sync(t, motion && cap.mode === 'rise');
+};
 dropScene.userData.update = (t, dt) => {
   const motion = motionOK();
   if (motion && drop.grab < 0) {
@@ -3872,6 +4203,7 @@ window.__SML = {
   medium,
   buoy,
   visc,
+  cap,
   ui,
   get frameCount() { return frameCount; },
   get reducedMotion() { return reducedMotion; },
