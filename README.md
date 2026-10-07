@@ -26,6 +26,8 @@ Railway is the live host. `Dockerfile`, `Caddyfile`, and `railway.toml` are read
 
 **10. Capillary action** — three wettable glass tubes stand in one dish. The left tube is wide and the right tube is narrow. The middle tube follows a width slider (or Wide / Medium / Narrow). The liquid's skin pulls along the wall, so a narrower opening climbs higher. With reduced motion or `?still=1`, the tubes rest on a finished climb. Press Climb, or change the width, and that one climb still runs.
 
+**11. Diffusion** — a drop of dye in a shallow still dish. The color spreads from a crowded spot into empty water. Nothing carries it. Warm water lets the dye wander faster. Cool water lets it wander more slowly. With reduced motion or `?still=1`, the dish opens on a dye cloud that has already spread, and holds still. Press Drop dye and that one spread still runs.
+
 ## Local
 
 ```bash

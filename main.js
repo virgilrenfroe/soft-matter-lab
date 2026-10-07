@@ -2997,6 +2997,277 @@ class CapillaryLab {
     }
   }
 }
+/* ——— Diffusion: dye spreads in still water ——— */
+
+class DiffusionDish {
+  constructor(rings, segs) {
+    this.rings = rings;
+    this.segs = segs;
+    this.radius = 1.3;
+    this.originX = -0.48;
+    this.originZ = 0.02;
+    this.sigma0 = 0.18;
+    this.sigmaLate = 1.22;
+    this.sigma = this.sigma0;
+    this.spread = 1;
+    this.baseY = 0.302;
+    this.bump = 0.34;
+    this.mode = 'hold';
+    this.timer = 0.55;
+    this.elapsed = 0;
+    this.userRun = false;
+    this.posed = false;
+    this.water = new THREE.Color(0x0b333c);
+    this.edge = new THREE.Color(0xff3d86);
+    this.dye = new THREE.Color(0xff1468);
+    this.hot = new THREE.Color(0xffe08a);
+    this.tmp = new THREE.Color();
+  }
+
+  setSpread(v) {
+    this.spread = Math.min(2.2, Math.max(0.4, v));
+  }
+
+  drop() {
+    this.userRun = true;
+    this.posed = false;
+    this.mode = 'spread';
+    this.elapsed = 0;
+    this.sigma = this.sigma0;
+  }
+
+  poseStill() {
+    this.sigma = this.sigma0 + (this.sigmaLate - this.sigma0) * 0.7;
+    this.mode = 'rest';
+    this.userRun = false;
+    this.posed = true;
+  }
+
+  step(dt) {
+    const h = Math.min(Math.max(dt, 0), 0.05);
+    if (this.mode === 'hold') {
+      this.sigma = this.sigma0;
+      this.timer -= h;
+      if (this.timer <= 0) {
+        this.mode = 'spread';
+        this.elapsed = 0;
+      }
+      return;
+    }
+    if (this.mode !== 'spread') return;
+    const diffusivity = 0.28 * this.spread;
+    this.sigma = Math.sqrt(this.sigma * this.sigma + 2 * diffusivity * h);
+    this.elapsed += h;
+    if (this.sigma >= this.sigmaLate || this.elapsed > 16) {
+      this.sigma = this.sigmaLate;
+      this.mode = 'rest';
+      this.userRun = false;
+      this.posed = true;
+    }
+  }
+
+  mount(scene) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6d4b32, roughness: 0.68, metalness: 0.05 });
+    const lipMat = new THREE.MeshStandardMaterial({
+      color: 0xd5dde6,
+      roughness: 0.28,
+      metalness: 0.82,
+      envMapIntensity: 1.05,
+    });
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0xf4fbff,
+      transparent: true,
+      opacity: 0.16,
+      roughness: 0.04,
+      metalness: 0.08,
+      envMapIntensity: 1.1,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x0b333c,
+      roughness: 0.28,
+      metalness: 0.04,
+      envMapIntensity: 0.45,
+    });
+
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(2.8, 48),
+      new THREE.MeshStandardMaterial({ color: 0x14120f, roughness: 0.96, metalness: 0.02, envMapIntensity: 0.25 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.2;
+    scene.add(ground);
+
+    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.82, 1.9, 0.14, 48), wood);
+    plinth.position.y = 0.0;
+    scene.add(plinth);
+
+    const dishFloor = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.4, 1.4, 0.05, 48),
+      new THREE.MeshStandardMaterial({ color: 0x0c2428, roughness: 0.9, metalness: 0.04 })
+    );
+    dishFloor.position.y = 0.09;
+    scene.add(dishFloor);
+
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(1.42, 1.42, 0.18, 64), waterMat);
+    water.position.y = 0.2;
+    scene.add(water);
+
+    const dishGlass = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.52, 1.46, 0.34, 64, 1, true),
+      glassMat
+    );
+    dishGlass.position.y = 0.24;
+    dishGlass.renderOrder = 4;
+    scene.add(dishGlass);
+
+    const dishLip = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.026, 8, 64), lipMat);
+    dishLip.rotation.x = Math.PI / 2;
+    dishLip.position.y = 0.41;
+    scene.add(dishLip);
+
+    this.buildDye();
+    scene.add(this.mesh);
+
+    const fleckMat = new THREE.MeshStandardMaterial({
+      color: 0xf6f1e6,
+      emissive: 0xf4efe6,
+      emissiveIntensity: 0.42,
+      roughness: 0.4,
+      metalness: 0.05,
+    });
+    const fleckGeo = new THREE.SphereGeometry(0.052, 16, 12);
+    const spots = [
+      [0.22, 0.34],
+      [0.62, 0.08],
+      [0.9, -0.28],
+      [0.38, -0.58],
+      [0.05, 0.78],
+      [1.02, 0.28],
+      [-0.9, -0.48],
+    ];
+    for (const [x, z] of spots) {
+      const fleck = new THREE.Mesh(fleckGeo, fleckMat);
+      fleck.position.set(x, 0.4, z);
+      fleck.renderOrder = 3;
+      scene.add(fleck);
+    }
+
+    this.sync();
+    return this;
+  }
+
+  buildDye() {
+    const rings = this.rings;
+    const segs = this.segs;
+    const count = 1 + rings * segs;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const indices = [];
+    positions[1] = this.baseY;
+    let v = 1;
+    for (let r = 1; r <= rings; r++) {
+      const rad = (r / rings) * this.radius;
+      for (let s = 0; s < segs; s++) {
+        const a = (s / segs) * Math.PI * 2;
+        const i = v * 3;
+        positions[i] = Math.cos(a) * rad;
+        positions[i + 1] = this.baseY;
+        positions[i + 2] = Math.sin(a) * rad;
+        v += 1;
+      }
+    }
+    for (let s = 0; s < segs; s++) {
+      const a = 1 + s;
+      const b = 1 + ((s + 1) % segs);
+      indices.push(0, a, b);
+    }
+    for (let r = 1; r < rings; r++) {
+      const inner = 1 + (r - 1) * segs;
+      const outer = 1 + r * segs;
+      for (let s = 0; s < segs; s++) {
+        const sn = (s + 1) % segs;
+        const i0 = inner + s;
+        const i1 = inner + sn;
+        const i2 = outer + s;
+        const i3 = outer + sn;
+        indices.push(i0, i2, i3);
+        indices.push(i0, i3, i1);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setIndex(indices);
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.62,
+      metalness: 0.02,
+      envMapIntensity: 0.25,
+      side: THREE.DoubleSide,
+    });
+    mat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+         totalEmissiveRadiance += diffuseColor.rgb * 0.62;`
+      );
+    };
+    this.geo = geo;
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.renderOrder = 2;
+    this.mesh.frustumCulled = false;
+  }
+
+  dyeColor(t) {
+    const shown = Math.min(1, Math.max(0, t));
+    if (shown < 0.06) return this.tmp.copy(this.water);
+    if (shown < 0.22) return this.tmp.copy(this.water).lerp(this.edge, (shown - 0.06) / 0.16);
+    if (shown < 0.94) return this.tmp.copy(this.edge).lerp(this.dye, Math.min(1, (shown - 0.22) / 0.5));
+    return this.tmp.copy(this.dye).lerp(this.hot, (shown - 0.94) / 0.06);
+  }
+
+  sync() {
+    const s0 = this.sigma0;
+    const s = Math.max(this.sigma, 0.05);
+    const fill = Math.min(1, Math.max(0, (s - s0) / (this.sigmaLate - s0)));
+    const amp = 1 - 0.58 * fill;
+    const power = 1.35 - 0.9 * fill;
+    const pos = this.geo.attributes.position;
+    const col = this.geo.attributes.color;
+    const ox = this.originX;
+    const oz = this.originZ;
+    const inv = 1 / (2 * s * s);
+    const washInv = 1 / (2 * 1.15 * 1.15);
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const dx = x - ox;
+      const dz = z - oz;
+      const r2 = dx * dx + dz * dz;
+      const g = Math.exp(-r2 * inv);
+      let shown = Math.pow(g, power) * amp;
+      shown = Math.min(1, shown + fill * 0.34 * Math.exp(-r2 * washInv));
+      const lift = shown > 0.84 ? shown * this.bump : shown * 0.07;
+      pos.setY(i, this.baseY + lift);
+      this.dyeColor(shown);
+      col.setXYZ(i, this.tmp.r, this.tmp.g, this.tmp.b);
+    }
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
+    this.geo.computeVertexNormals();
+    const nrm = this.geo.attributes.normal;
+    let ny = 0;
+    for (let i = 0; i < nrm.count; i++) ny += nrm.getY(i);
+    if (ny < 0) {
+      for (let i = 0; i < nrm.count; i++) {
+        nrm.setXYZ(i, -nrm.getX(i), -nrm.getY(i), -nrm.getZ(i));
+      }
+      nrm.needsUpdate = true;
+    }
+  }
+}
 /* ——— Build specimens ——— */
 
 const waveCols = narrowAtStart ? 40 : 68;
@@ -3461,6 +3732,47 @@ const capPoint = new THREE.PointLight(0xffd2a4, 26, 14, 2);
 capPoint.position.set(1.2, 2.55, 2.4);
 capScene.add(capPoint);
 cap.mount(capScene);
+const diffusion = new DiffusionDish(narrowAtStart ? 28 : 40, narrowAtStart ? 64 : 96);
+const diffScene = makeScene(document.querySelector('[data-scene="diff"]'), {
+  bg: 0x101418,
+  px: -0.42,
+  py: 1.95,
+  pz: 2.05,
+  tx: -0.55,
+  ty: 0.18,
+  tz: 0,
+  fov: 30,
+  minDist: 1.6,
+  maxDist: 6.8,
+});
+diffScene.userData.controls.minPolarAngle = 0.28;
+diffScene.userData.controls.maxPolarAngle = 1.18;
+let diffStacked = null;
+function frameDiff() {
+  const stacked = window.innerWidth <= 860;
+  if (stacked === diffStacked) return;
+  diffStacked = stacked;
+  const controls = diffScene.userData.controls;
+  const cam = diffScene.userData.camera;
+  if (stacked) {
+    controls.target.set(-0.08, 0.14, 0);
+    cam.position.set(0.02, 2.65, 1.15);
+    cam.fov = 34;
+  } else {
+    controls.target.set(-0.55, 0.18, 0);
+    cam.position.set(-0.42, 1.95, 2.05);
+    cam.fov = 30;
+  }
+  cam.updateProjectionMatrix();
+  controls.update();
+}
+frameDiff();
+window.addEventListener('resize', frameDiff);
+diffScene.add(new THREE.HemisphereLight(0xc5daf5, 0x3a2416, 1.3));
+const diffPoint = new THREE.PointLight(0xffd2a4, 11, 18, 2);
+diffPoint.position.set(1.15, 2.7, 2.15);
+diffScene.add(diffPoint);
+diffusion.mount(diffScene);
 /* ——— UI state ——— */
 
 const ui = {
@@ -3490,6 +3802,7 @@ const ui = {
   buoyFluid: 1,
   viscMu: 14,
   capWidth: 2.2,
+  diffSpread: 1,
   drive: true,
 };
 
@@ -3643,6 +3956,38 @@ document.getElementById('cap-climb').addEventListener('click', () => {
 if (!motionOK()) {
   cap.poseStill();
   cap.sync(0, false);
+}
+bindRange('diff-spread', (v) => v.toFixed(2), (v) => {
+  ui.diffSpread = v;
+  const wasRest = diffusion.mode === 'rest';
+  diffusion.setSpread(v);
+  syncDiffChips();
+  if (wasRest) diffusion.drop();
+});
+
+function syncDiffChips() {
+  document.querySelectorAll('[data-diff]').forEach((b) => {
+    const on = Math.abs(ui.diffSpread - Number(b.dataset.diff)) < 0.08;
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
+
+document.querySelectorAll('[data-diff]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const el = document.getElementById('diff-spread');
+    el.value = btn.dataset.diff;
+    el.dispatchEvent(new Event('input'));
+    diffusion.drop();
+  });
+});
+
+document.getElementById('diff-drop').addEventListener('click', () => {
+  diffusion.drop();
+});
+
+if (!motionOK()) {
+  diffusion.poseStill();
+  diffusion.sync();
 }
 
 function syncDropShapeChips() {
@@ -4078,6 +4423,15 @@ capScene.userData.update = (t, dt) => {
   }
   cap.sync(t, motion && cap.mode === 'rise');
 };
+diffScene.userData.update = (t, dt) => {
+  const motion = motionOK();
+  if (!motion && !diffusion.userRun) {
+    if (!diffusion.posed) diffusion.poseStill();
+  } else {
+    diffusion.step(dt);
+  }
+  diffusion.sync();
+};
 dropScene.userData.update = (t, dt) => {
   const motion = motionOK();
   if (motion && drop.grab < 0) {
@@ -4204,6 +4558,7 @@ window.__SML = {
   buoy,
   visc,
   cap,
+  diffusion,
   ui,
   get frameCount() { return frameCount; },
   get reducedMotion() { return reducedMotion; },
