@@ -387,7 +387,9 @@
     .sheet {
       pointer-events: auto;
       max-height: min(52vh, 460px);
-      overflow: auto;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
       padding: 1rem 1.1rem 1.05rem;
       border-radius: 26px;
       background: var(--glass);
@@ -397,6 +399,16 @@
       scrollbar-width: thin;
       scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
     }
+    .sheet-copy {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+    }
+    .sheet > .try,
+    .sheet > .chips,
+    .sheet > .ctrls { flex-shrink: 0; }
     .notice {
       font-family: var(--mono);
       font-size: 12px;
@@ -407,13 +419,22 @@
     .lesson p { margin: 0 0 0.5rem; }
     .lesson p:last-child { margin-bottom: 0; }
     .definition {
+      margin: 0 0 0.85rem;
+      max-width: 38rem;
+      font-size: 17px;
+      line-height: 1.4;
+      font-weight: 500;
+      color: var(--ink);
+      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.88), 0 1px 2px rgba(0, 0, 0, 0.75);
+    }
+    .sheet .definition {
       margin: 0 0 0.75rem;
       padding-bottom: 0.7rem;
       border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+      max-width: none;
       font-size: 16px;
       line-height: 1.45;
-      font-weight: 500;
-      color: var(--ink);
+      text-shadow: none;
     }
     .world, .mistakes {
       margin-top: 0.7rem;
@@ -539,7 +560,8 @@
       display: grid;
       grid-template-columns: 1.15fr 0.85fr;
       gap: 0.4rem 1.6rem;
-      max-height: min(42vh, 380px);
+      max-height: min(50vh, 460px);
+      overflow: auto;
     }
     .centerpiece .sheet .try { margin-top: 0; }
     .centerpiece .specimen-title {
@@ -711,6 +733,7 @@
         border-radius: 0;
         display: block;
       }
+      .sheet-copy { overflow: visible; }
       .teachers, .map-cols { grid-template-columns: 1fr; }
       .teach-card:nth-child(2) { margin-left: 0; }
       .teachers { min-height: 0; padding-top: 5.5rem; }
@@ -789,8 +812,9 @@
         <div class="placard-stack">
           <p class="specimen-num">Specimen 01 — Wave basin</p>
           <h2 class="specimen-title">The crest travels. The water stays.</h2>
+          <p class="definition">A wave moves energy through a material. The crest runs from the paddle to the far wall, and the water under it only rises and falls.</p>
           <div class="sheet">
-            <p class="definition">A wave moves energy through a material. The crest runs from the paddle to the far wall, and the water under it only rises and falls.</p>
+            <div class="sheet-copy">
             <p class="notice">Note — energy crosses the tank. The colored floats do not.</p>
             <div class="lesson">
               <p>A traveling wave carries energy from the orange paddle to the far wall.</p>
@@ -809,6 +833,7 @@
                 <li>A float does not slide along the tank. It stays on its mast.</li>
                 <li>A ring that spreads is not water flowing outward. The ring moves. The floats stay.</li>
               </ul>
+            </div>
             </div>
             <div class="try">
               <strong>Try this</strong>
@@ -848,8 +873,9 @@
         <div class="placard-stack">
           <p class="specimen-num">Specimen 02 — Cloth</p>
           <h2 class="specimen-title">The sheet shares the tension.</h2>
+          <p class="definition">Tension is a pull shared across a cloth. Tug one stitch and the neighbors take the load, so the whole sheet curves together.</p>
           <div class="sheet">
-            <p class="definition">Tension is a pull shared across a cloth. Tug one stitch and the neighbors take the load, so the whole sheet curves together.</p>
+            <div class="sheet-copy">
             <p class="notice">Note — pull one stitch. The threads around it take the load.</p>
             <div class="lesson">
               <p>The cloth is a grid of points tied to their neighbors.</p>
@@ -868,6 +894,7 @@
                 <li>Colored stitches do not slip out of the cloth. They stay in the weave.</li>
                 <li>Wind does not pick off one thread at a time. The whole sheet bows together.</li>
               </ul>
+            </div>
             </div>
             <div class="try">
               <strong>Try this</strong>
@@ -908,8 +935,9 @@
         <div class="placard-stack">
           <p class="specimen-num">Specimen 03 — Flow</p>
           <h2 class="specimen-title">Here the material moves.</h2>
+          <p class="definition">Flow carries the material itself. The ink travels with the current, from one side of the tank to the other.</p>
           <div class="sheet">
-            <p class="definition">Flow carries the material itself. The ink travels with the current, from one side of the tank to the other.</p>
+            <div class="sheet-copy">
             <p class="notice">Note — unlike the floats, each drop travels with the current.</p>
             <div class="lesson">
               <p>In the wave tank, the floats stayed on their masts.</p>
@@ -928,6 +956,7 @@
                 <li>The clay post does not end the stream. The ink goes around it and meets again.</li>
                 <li>Flow is not a wave. A wave moves energy while the material stays. Flow carries the material.</li>
               </ul>
+            </div>
             </div>
             <div class="try">
               <strong>Try this</strong>
@@ -1017,8 +1046,9 @@
         <div class="placard-stack">
           <p class="specimen-num">Specimen 05 — Surface tension</p>
           <h2 class="specimen-title">The skin pulls the drop.</h2>
+          <p class="definition">Surface tension is the inward pull in a liquid's skin. That pull holds a drop as a round bead, or lets the same liquid spread and wet the plate.</p>
           <div class="sheet">
-            <p class="definition">Surface tension is the inward pull in a liquid's skin. That pull holds a drop as a round bead, or lets the same liquid spread and wet the plate.</p>
+            <div class="sheet-copy">
             <p class="notice">Note — surface tension is the pull in a liquid's skin. That pull makes a bead, or lets the drop wet out.</p>
             <div class="lesson">
               <p>A liquid has a skin. The skin pulls inward.</p>
@@ -1037,6 +1067,7 @@
                 <li>The colored stitches are not inside the drop. They sit on the skin.</li>
                 <li>Bead and wet-out are not two different amounts. The skin and the plate set the shape.</li>
               </ul>
+            </div>
             </div>
             <div class="try">
               <strong>Try this</strong>
