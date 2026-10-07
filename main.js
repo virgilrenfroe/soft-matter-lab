@@ -1113,6 +1113,620 @@ class SessileDrop {
   }
 }
 
+/* ——— Soft body: one volume, distance constraints, sideways bulge ——— */
+
+class SoftBody {
+  constructor(n, size) {
+    this.n = n;
+    this.size = size;
+    this.count = n * n * n;
+    this.spacing = size / (n - 1);
+    this.floor = 0;
+    this.pos = new Float32Array(this.count * 3);
+    this.prev = new Float32Array(this.count * 3);
+    this.rest = new Float32Array(this.count * 3);
+    this.inv = new Float32Array(this.count);
+    this.inv.fill(1);
+    this.constraints = [];
+    this.tris = [];
+    this.pins = [];
+    this.grab = -1;
+    this.holdX = 0;
+    this.holdY = 0;
+    this.holdZ = 0;
+    this.flickX = 0;
+    this.flickY = 0;
+    this.flickZ = 0;
+    this.liveUntil = 0;
+    this.soften = 0;
+    this.impactLock = 0;
+    this.restH = size;
+    this.volumeRatio = 1;
+    this.foot = size * 0.5;
+    this.restFoot = size * 0.5;
+    this.restV = 1;
+
+    const id = (i, j, k) => i + n * (j + n * k);
+    this._id = id;
+    const p = 2.6;
+    for (let k = 0; k < n; k++) {
+      for (let j = 0; j < n; j++) {
+        for (let i = 0; i < n; i++) {
+          const u = (i / (n - 1) - 0.5) * 2;
+          const w = (k / (n - 1) - 0.5) * 2;
+          const au = Math.abs(u);
+          const aw = Math.abs(w);
+          const nrm = Math.pow(Math.pow(au, p) + Math.pow(aw, p), 1 / p) || 1;
+          const scale = Math.min(1, 1 / nrm);
+          const yT = j / (n - 1);
+          const dome = Math.max(0, 1 - (u * scale) * (u * scale) - (w * scale) * (w * scale)) * 0.07 * yT;
+          const o = id(i, j, k) * 3;
+          this.rest[o] = u * scale * (size * 0.5);
+          this.rest[o + 1] = yT * size + dome;
+          this.rest[o + 2] = w * scale * (size * 0.5);
+        }
+      }
+    }
+    this.pos.set(this.rest);
+    this.prev.set(this.rest);
+    let restH = 0;
+    for (let i = 0; i < this.count; i++) restH = Math.max(restH, this.rest[i * 3 + 1]);
+    this.restH = restH;
+
+    const add = (a, b, kmul) => {
+      const dx = this.rest[a * 3] - this.rest[b * 3];
+      const dy = this.rest[a * 3 + 1] - this.rest[b * 3 + 1];
+      const dz = this.rest[a * 3 + 2] - this.rest[b * 3 + 2];
+      const restLen = Math.hypot(dx, dy, dz);
+      if (restLen < 1e-5) return;
+      this.constraints.push({ a, b, rest: restLen, k: kmul });
+    };
+    for (let k = 0; k < n; k++) {
+      for (let j = 0; j < n; j++) {
+        for (let i = 0; i < n; i++) {
+          const a = id(i, j, k);
+          if (i + 1 < n) add(a, id(i + 1, j, k), 1);
+          if (j + 1 < n) add(a, id(i, j + 1, k), 1);
+          if (k + 1 < n) add(a, id(i, j, k + 1), 1);
+          if (i + 1 < n && j + 1 < n) {
+            add(a, id(i + 1, j + 1, k), 0.48);
+            add(id(i + 1, j, k), id(i, j + 1, k), 0.48);
+          }
+          if (i + 1 < n && k + 1 < n) {
+            add(a, id(i + 1, j, k + 1), 0.48);
+            add(id(i + 1, j, k), id(i, j, k + 1), 0.48);
+          }
+          if (j + 1 < n && k + 1 < n) {
+            add(a, id(i, j + 1, k + 1), 0.48);
+            add(id(i, j, k + 1), id(i, j + 1, k), 0.48);
+          }
+        }
+      }
+    }
+
+    const quad = (a, b, c, d) => {
+      this.tris.push(a, b, c, a, c, d);
+    };
+    for (let k = 0; k < n - 1; k++) {
+      for (let i = 0; i < n - 1; i++) {
+        const jTop = n - 1;
+        quad(id(i, jTop, k), id(i, jTop, k + 1), id(i + 1, jTop, k + 1), id(i + 1, jTop, k));
+        quad(id(i, 0, k), id(i + 1, 0, k), id(i + 1, 0, k + 1), id(i, 0, k + 1));
+      }
+    }
+    for (let k = 0; k < n - 1; k++) {
+      for (let j = 0; j < n - 1; j++) {
+        const iFar = n - 1;
+        quad(id(iFar, j, k), id(iFar, j + 1, k), id(iFar, j + 1, k + 1), id(iFar, j, k + 1));
+        quad(id(0, j, k), id(0, j, k + 1), id(0, j + 1, k + 1), id(0, j + 1, k));
+      }
+    }
+    for (let j = 0; j < n - 1; j++) {
+      for (let i = 0; i < n - 1; i++) {
+        const kFar = n - 1;
+        quad(id(i, j, kFar), id(i + 1, j, kFar), id(i + 1, j + 1, kFar), id(i, j + 1, kFar));
+        quad(id(i, j, 0), id(i, j + 1, 0), id(i + 1, j + 1, 0), id(i + 1, j, 0));
+      }
+    }
+
+    this.restV = this.volume();
+    if (this.restV < 0) {
+      const t = this.tris;
+      for (let i = 0; i < t.length; i += 3) {
+        const swap = t[i + 1];
+        t[i + 1] = t[i + 2];
+        t[i + 2] = swap;
+      }
+      this.restV = this.volume();
+    }
+
+    this._buildMesh();
+    this._buildMarkers();
+    this.restFoot = this._footprint();
+    this.foot = this.restFoot;
+    this.sync();
+  }
+
+  volume() {
+    const p = this.pos;
+    const t = this.tris;
+    let v = 0;
+    for (let i = 0; i < t.length; i += 3) {
+      const a = t[i] * 3;
+      const b = t[i + 1] * 3;
+      const c = t[i + 2] * 3;
+      const ax = p[a];
+      const ay = p[a + 1];
+      const az = p[a + 2];
+      const bx = p[b];
+      const by = p[b + 1];
+      const bz = p[b + 2];
+      const cx = p[c];
+      const cy = p[c + 1];
+      const cz = p[c + 2];
+      v += ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx);
+    }
+    return v / 6;
+  }
+
+  _footprint() {
+    let maxR = 0.001;
+    for (let i = 0; i < this.count; i++) {
+      const r = Math.hypot(this.pos[i * 3], this.pos[i * 3 + 2]);
+      if (r > maxR) maxR = r;
+    }
+    return maxR;
+  }
+
+  _buildMesh() {
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(this.count * 3);
+    positions.set(this.pos);
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const colors = new Float32Array(this.count * 3);
+    const deep = new THREE.Color(0xb33a0e);
+    const body = new THREE.Color(0xff6412);
+    const skin = new THREE.Color(0xffb15e);
+    const tmp = new THREE.Color();
+    const n = this.n;
+    for (let k = 0; k < n; k++) {
+      for (let j = 0; j < n; j++) {
+        for (let i = 0; i < n; i++) {
+          const u = Math.abs((i / (n - 1) - 0.5) * 2);
+          const w = Math.abs((k / (n - 1) - 0.5) * 2);
+          const yT = j / (n - 1);
+          const edge = Math.max(u, w);
+          tmp.copy(deep).lerp(body, 0.22 + 0.78 * yT);
+          tmp.lerp(skin, yT * yT * 0.42 + Math.pow(edge, 2.2) * 0.22);
+          if (j === n - 1) tmp.lerp(skin, 0.32);
+          const o = this._id(i, j, k) * 3;
+          colors[o] = tmp.r;
+          colors[o + 1] = tmp.g;
+          colors[o + 2] = tmp.b;
+        }
+      }
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setIndex(this.tris);
+    geo.computeVertexNormals();
+    this.geo = geo;
+    this.mesh = new THREE.Mesh(
+      geo,
+      new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        roughness: 0.26,
+        metalness: 0,
+        clearcoat: 0.58,
+        clearcoatRoughness: 0.24,
+        sheen: 0.2,
+        sheenRoughness: 0.4,
+        sheenColor: new THREE.Color(0xffd7a4),
+        emissive: 0xff4e0e,
+        emissiveIntensity: 0.045,
+        envMapIntensity: 1.05,
+      })
+    );
+    this.mesh.frustumCulled = false;
+  }
+
+  _buildMarkers() {
+    this.markers = [];
+    const n = this.n;
+    const mid = Math.floor(n / 2);
+    const specs = [
+      this._id(mid, n - 1, mid),
+      this._id(0, mid, mid),
+      this._id(n - 1, mid, Math.max(0, mid - 1)),
+      this._id(mid, mid, n - 1),
+      this._id(Math.min(n - 1, mid + 2), n - 1, mid),
+    ];
+    const markerColors = [0xffc857, 0xff5a1f, 0x7ec8ff, 0xc8f542, 0xf4efe6];
+    const seen = new Set();
+    for (let m = 0; m < specs.length; m++) {
+      if (seen.has(specs[m])) continue;
+      seen.add(specs[m]);
+      const color = markerColors[m % markerColors.length];
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(n > 5 ? 0.052 : 0.06, 14, 10),
+        new THREE.MeshStandardMaterial({
+          color,
+          emissive: color,
+          emissiveIntensity: 0.46,
+          roughness: 0.36,
+        })
+      );
+      mesh.frustumCulled = false;
+      this.markers.push({ mesh, index: specs[m] });
+    }
+  }
+
+  _unlock() {
+    for (let p = 0; p < this.pins.length; p++) this.inv[this.pins[p].i] = 1;
+    this.pins = [];
+    this.grab = -1;
+  }
+
+  reset() {
+    this.pos.set(this.rest);
+    this.prev.set(this.rest);
+    this.inv.fill(1);
+    this._unlock();
+    this.flickX = this.flickY = this.flickZ = 0;
+    this.soften = 0;
+    this.impactLock = 0;
+    this.volumeRatio = 1;
+  }
+
+  dropFrom(height) {
+    this.reset();
+    for (let i = 0; i < this.count; i++) {
+      this.pos[i * 3 + 1] += height;
+      this.prev[i * 3 + 1] += height;
+    }
+    this.liveUntil = performance.now() + 4600;
+  }
+
+  grabAt(index) {
+    if (index < 0 || index >= this.count) return false;
+    this._unlock();
+    this.grab = index;
+    const o = index * 3;
+    const px = this.pos[o];
+    const py = this.pos[o + 1];
+    const pz = this.pos[o + 2];
+    this.originX = px;
+    this.originY = py;
+    this.originZ = pz;
+    this.holdX = px;
+    this.holdY = py;
+    this.holdZ = pz;
+    this.flickX = this.flickY = this.flickZ = 0;
+    const rad = this.spacing * 2.65;
+    for (let i = 0; i < this.count; i++) {
+      const dx = this.pos[i * 3] - px;
+      const dy = this.pos[i * 3 + 1] - py;
+      const dz = this.pos[i * 3 + 2] - pz;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > rad) continue;
+      const w = 0.5 * (1 + Math.cos((Math.PI * d) / rad));
+      if (w < 0.12) continue;
+      this.pins.push({
+        i,
+        x: this.pos[i * 3],
+        y: this.pos[i * 3 + 1],
+        z: this.pos[i * 3 + 2],
+        w,
+      });
+      this.inv[i] = 0;
+    }
+    return true;
+  }
+
+  moveGrab(x, y, z) {
+    if (this.grab < 0) return;
+    const nx = Math.max(-1.35, Math.min(1.35, x));
+    const deepest = this.originY - this.size * 0.4;
+    const highest = this.originY + this.size * 0.26;
+    const ny = Math.max(deepest, Math.min(highest, y));
+    const nz = Math.max(-1.35, Math.min(1.35, z));
+    this.flickX = nx - this.holdX;
+    this.flickY = ny - this.holdY;
+    this.flickZ = nz - this.holdZ;
+    this.holdX = nx;
+    this.holdY = ny;
+    this.holdZ = nz;
+    this._pinCore();
+    this._solve(0.58, 2);
+    this._holdVolume(0.7);
+    this._clampFloor();
+    this._pinCore();
+  }
+
+  releaseGrab() {
+    if (this.grab < 0 && this.pins.length === 0) return;
+    const max = 0.055;
+    const fx = Math.max(-max, Math.min(max, this.flickX));
+    const fy = Math.max(-max, Math.min(max, this.flickY));
+    const fz = Math.max(-max, Math.min(max, this.flickZ));
+    for (let p = 0; p < this.pins.length; p++) {
+      const pin = this.pins[p];
+      if (pin.w < 0.7) continue;
+      const o = pin.i * 3;
+      this.prev[o] = this.pos[o] - fx * pin.w;
+      this.prev[o + 1] = this.pos[o + 1] - fy * pin.w;
+      this.prev[o + 2] = this.pos[o + 2] - fz * pin.w;
+    }
+    this._unlock();
+    this.liveUntil = performance.now() + 2000;
+  }
+
+  _pinCore() {
+    if (this.grab < 0) return;
+    const dx = this.holdX - this.originX;
+    const dy = this.holdY - this.originY;
+    const dz = this.holdZ - this.originZ;
+    for (let p = 0; p < this.pins.length; p++) {
+      const pin = this.pins[p];
+      const o = pin.i * 3;
+      this.pos[o] = pin.x + dx * pin.w;
+      this.pos[o + 1] = Math.max(this.floor, pin.y + dy * pin.w);
+      this.pos[o + 2] = pin.z + dz * pin.w;
+    }
+  }
+
+  _floor(bounce) {
+    const y0 = this.floor;
+    const pos = this.pos;
+    const prev = this.prev;
+    for (let i = 0; i < this.count; i++) {
+      const o = i * 3 + 1;
+      if (pos[o] >= y0) continue;
+      const vy = pos[o] - prev[o];
+      pos[o] = y0;
+      if (vy < -0.018) prev[o] = y0 + vy * bounce;
+      else prev[o] = y0;
+      const ox = i * 3;
+      const slip = 0.42;
+      prev[ox] = pos[ox] - (pos[ox] - prev[ox]) * slip;
+      prev[ox + 2] = pos[ox + 2] - (pos[ox + 2] - prev[ox + 2]) * slip;
+    }
+  }
+
+  _solve(stiff, iters) {
+    const { pos, inv, constraints } = this;
+    const kUser = Math.max(0.05, Math.min(1, stiff));
+    for (let k = 0; k < iters; k++) {
+      for (let n = 0; n < constraints.length; n++) {
+        const c = constraints[n];
+        const ia = c.a * 3;
+        const ib = c.b * 3;
+        const wa = inv[c.a];
+        const wb = inv[c.b];
+        const w = wa + wb;
+        if (w === 0) continue;
+        let dx = pos[ib] - pos[ia];
+        let dy = pos[ib + 1] - pos[ia + 1];
+        let dz = pos[ib + 2] - pos[ia + 2];
+        const dist = Math.hypot(dx, dy, dz) || 1e-6;
+        const diff = (dist - c.rest) / dist;
+        let corr = (diff * kUser * c.k) / w;
+        if (corr > 0.55) corr = 0.55;
+        if (corr < -0.55) corr = -0.55;
+        if (wa) {
+          pos[ia] += dx * corr * wa;
+          pos[ia + 1] += dy * corr * wa;
+          pos[ia + 2] += dz * corr * wa;
+        }
+        if (wb) {
+          pos[ib] -= dx * corr * wb;
+          pos[ib + 1] -= dy * corr * wb;
+          pos[ib + 2] -= dz * corr * wb;
+        }
+      }
+      this._clampFloor();
+      this._pinCore();
+    }
+  }
+
+  _clampFloor() {
+    const y0 = this.floor;
+    for (let i = 0; i < this.count; i++) {
+      const o = i * 3 + 1;
+      if (this.pos[o] < y0) this.pos[o] = y0;
+    }
+  }
+
+  _holdVolume(stiff) {
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let cx = 0;
+    let cz = 0;
+    for (let i = 0; i < this.count; i++) {
+      const y = this.pos[i * 3 + 1];
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      cx += this.pos[i * 3];
+      cz += this.pos[i * 3 + 2];
+    }
+    cx /= this.count;
+    cz /= this.count;
+    const h = Math.max(0.08, maxY - minY);
+    const targetR = this.restFoot * Math.sqrt(Math.max(1, this.restH / h));
+    let foot = 0.001;
+    for (let i = 0; i < this.count; i++) {
+      const r = Math.hypot(this.pos[i * 3] - cx, this.pos[i * 3 + 2] - cz);
+      if (r > foot) foot = r;
+    }
+    const gap = (targetR - foot) / foot;
+    if (gap > 0.012) {
+      const bulge = Math.min(0.04, gap * (0.35 + stiff * 0.15));
+      for (let i = 0; i < this.count; i++) {
+        if (this.inv[i] === 0) continue;
+        const o = i * 3;
+        this.pos[o] += (this.pos[o] - cx) * bulge;
+        this.pos[o + 2] += (this.pos[o + 2] - cz) * bulge;
+      }
+    }
+    const V = this.volume();
+    this.volumeRatio = this.restV > 0 ? V / this.restV : 1;
+  }
+
+  _easeBack() {
+    if (this.grab >= 0 || this.soften > 0) return;
+    let minY = Infinity;
+    for (let i = 0; i < this.count; i++) minY = Math.min(minY, this.pos[i * 3 + 1]);
+    if (minY > 0.2) return;
+    const stiff = this._stiff ?? 0.62;
+    const damp = this._damp ?? 0.4;
+    const gravity = this._grav ?? 1;
+    const squat = 1 / (1 + 0.07 * gravity);
+    const widen = Math.sqrt(1 / squat);
+    const beta = (0.02 + stiff * 0.05) * (1 - damp * 0.62);
+    for (let i = 0; i < this.count; i++) {
+      if (this.inv[i] === 0) continue;
+      const o = i * 3;
+      const tx = this.rest[o] * widen;
+      const ty = this.rest[o + 1] * squat;
+      const tz = this.rest[o + 2] * widen;
+      this.pos[o] += (tx - this.pos[o]) * beta;
+      this.pos[o + 1] += (ty - this.pos[o + 1]) * beta;
+      this.pos[o + 2] += (tz - this.pos[o + 2]) * beta;
+      const err = Math.hypot(tx - this.pos[o], ty - this.pos[o + 1], tz - this.pos[o + 2]);
+      const keep = err > 0.12 ? 0.35 : 0.82;
+      this.prev[o] = this.pos[o] - (this.pos[o] - this.prev[o]) * keep;
+      this.prev[o + 1] = this.pos[o + 1] - (this.pos[o + 1] - this.prev[o + 1]) * keep;
+      this.prev[o + 2] = this.pos[o + 2] - (this.pos[o + 2] - this.prev[o + 2]) * keep;
+    }
+  }
+
+  _substep(dt, stiff, retain, gy, bounce) {
+    const { pos, prev, inv } = this;
+    const dt2 = dt * dt;
+    let minY = Infinity;
+    for (let i = 0; i < this.count; i++) minY = Math.min(minY, pos[i * 3 + 1]);
+    const retainNow = minY > 0.15 ? 0.994 : retain;
+    for (let i = 0; i < this.count; i++) {
+      if (inv[i] === 0) continue;
+      const o = i * 3;
+      const x = pos[o];
+      const y = pos[o + 1];
+      const z = pos[o + 2];
+      const vx = (x - prev[o]) * retainNow;
+      const vy = (y - prev[o + 1]) * retainNow;
+      const vz = (z - prev[o + 2]) * retainNow;
+      prev[o] = x;
+      prev[o + 1] = y;
+      prev[o + 2] = z;
+      pos[o] = x + vx;
+      pos[o + 1] = y + vy + gy * dt2;
+      pos[o + 2] = z + vz;
+    }
+    if (this.impactLock > 0) this.impactLock -= 1;
+    if (this.grab < 0 && this.soften <= 0 && this.impactLock <= 0) {
+      for (let i = 0; i < this.count; i++) {
+        const y = pos[i * 3 + 1];
+        const vy = y - prev[i * 3 + 1];
+        if (y < 0.05 && vy < -0.007) {
+          this.soften = 40;
+          this.impactLock = 220;
+          const crush = 0.4 + stiff * 0.45;
+          for (let k = 0; k < this.count; k++) {
+            const oy = k * 3 + 1;
+            pos[oy] *= crush;
+            prev[oy] = pos[oy];
+          }
+          break;
+        }
+      }
+    }
+    let useStiff = stiff;
+    let useBounce = bounce;
+    if (this.soften > 0) {
+      const t = this.soften / 40;
+      useStiff = stiff * (0.1 + 0.9 * (1 - t * t));
+      useBounce = bounce * (1 - t);
+      this.soften -= 1;
+    }
+    this._floor(useBounce);
+    this._pinCore();
+    const iters = useStiff < 0.12 ? 1 : useStiff > 0.78 ? 5 : useStiff > 0.42 ? 4 : 3;
+    this._solve(useStiff, iters);
+    if (this.soften > 0) {
+      for (let i = 0; i < this.count; i++) {
+        const oy = i * 3 + 1;
+        prev[oy] = pos[oy] - (pos[oy] - prev[oy]) * 0.2;
+      }
+    }
+    this._holdVolume(useStiff);
+    this._easeBack();
+    this._clampFloor();
+    this._pinCore();
+  }
+
+  step(dt, opts) {
+    const stiff = Math.max(0.08, Math.min(1, opts.stiff));
+    const dampUser = Math.max(0, Math.min(1, opts.damp));
+    const gravity = Math.max(0, opts.gravity || 0);
+    this._stiff = stiff;
+    this._damp = dampUser;
+    this._grav = gravity;
+    const retain = 0.992 - dampUser * 0.09;
+    const gy = -6.8 * gravity;
+    const bounce = 0.04 + stiff * 0.22;
+    const sub = Math.min(Math.max(dt, 0.001), 0.033);
+    const h = sub * 0.5;
+    this._substep(h, stiff, retain, gy, bounce);
+    this._substep(h, stiff, retain, gy, bounce);
+    let bad = false;
+    for (let i = 0; i < this.count; i++) {
+      const x = this.pos[i * 3];
+      const y = this.pos[i * 3 + 1];
+      const z = this.pos[i * 3 + 2];
+      if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 5 || Math.abs(z) > 5 || y > 6) bad = true;
+    }
+    if (bad) this.reset();
+  }
+
+  sync() {
+    const attr = this.geo.attributes.position;
+    attr.array.set(this.pos);
+    attr.needsUpdate = true;
+    this.geo.computeVertexNormals();
+    let cx = 0;
+    let cy = 0;
+    let cz = 0;
+    for (let i = 0; i < this.count; i++) {
+      cx += this.pos[i * 3];
+      cy += this.pos[i * 3 + 1];
+      cz += this.pos[i * 3 + 2];
+    }
+    const invN = 1 / this.count;
+    cx *= invN;
+    cy *= invN;
+    cz *= invN;
+    const lift = 0.03;
+    for (const m of this.markers) {
+      const o = m.index * 3;
+      const x = this.pos[o];
+      const y = this.pos[o + 1];
+      const z = this.pos[o + 2];
+      let nx = x - cx;
+      let ny = y - cy;
+      let nz = z - cz;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      m.mesh.position.set(
+        x + (nx / len) * lift,
+        Math.max(this.floor + 0.045, y + (ny / len) * lift),
+        z + (nz / len) * lift
+      );
+    }
+    this.foot = this._footprint();
+    const V = this.volume();
+    this.volumeRatio = this.restV > 0 ? V / this.restV : 1;
+  }
+}
+
 /* ——— Build specimens ——— */
 
 const waveCols = narrowAtStart ? 40 : 68;
@@ -1355,6 +1969,59 @@ dropScene.add(drop.capMesh);
 dropScene.add(drop.footMesh);
 for (const m of drop.markers) dropScene.add(m.mesh);
 
+const jellyN = narrowAtStart ? 5 : 7;
+const jelly = new SoftBody(jellyN, 1.12);
+const jellyDefaults = { stiff: 0.62, damp: 0.4, gravity: 1 };
+if (motionOK()) {
+  for (let i = 0; i < 90; i++) jelly.step(1 / 60, jellyDefaults);
+  jelly.sync();
+}
+
+const jellyScene = makeScene(document.querySelector('[data-scene="jelly"]'), {
+  bg: 0x14110e,
+  px: 1.78,
+  py: 1.18,
+  pz: 2.78,
+  tx: 0.32,
+  ty: 0.5,
+  tz: 0,
+  fov: 32,
+  minDist: 1.45,
+  maxDist: 7.5,
+});
+jellyScene.userData.controls.enabled = false;
+jellyScene.userData.controls.maxPolarAngle = Math.PI * 0.48;
+jellyScene.userData.controls.minPolarAngle = 0.28;
+addKeyLight(jellyScene, 0xfff1e4, 2.75);
+const jellyRim = new THREE.DirectionalLight(0xb7d9ff, 1.25);
+jellyRim.position.set(-2.5, 1.7, -1.8);
+jellyScene.add(jellyRim);
+const jellyFill = new THREE.DirectionalLight(0xffc27a, 0.72);
+jellyFill.position.set(0.2, 0.55, 2.6);
+jellyScene.add(jellyFill);
+const jellyWood = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.52, 1.62, 0.18, 40),
+  new THREE.MeshStandardMaterial({ color: 0x6d4b32, roughness: 0.72, metalness: 0.04 })
+);
+jellyWood.position.y = -0.18;
+jellyScene.add(jellyWood);
+const jellyPlate = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.28, 1.34, 0.08, 40),
+  new THREE.MeshStandardMaterial({ color: 0x231e1a, roughness: 0.78, metalness: 0.06, envMapIntensity: 0.35 })
+);
+jellyPlate.position.y = -0.04;
+jellyScene.add(jellyPlate);
+const jellyShadow = new THREE.Mesh(
+  new THREE.CircleGeometry(jelly.restFoot * 1.05, 36),
+  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false })
+);
+jellyShadow.rotation.x = -Math.PI / 2;
+jellyShadow.position.y = -0.008;
+jellyShadow.frustumCulled = false;
+jellyScene.add(jellyShadow);
+jellyScene.add(jelly.mesh);
+for (const m of jelly.markers) jellyScene.add(m.mesh);
+
 /* ——— UI state ——— */
 
 const ui = {
@@ -1371,6 +2038,10 @@ const ui = {
   dropWet: 0.18,
   dropSkin: 0.86,
   dropMode: 'poke',
+  jellyStiff: 0.62,
+  jellyDamp: 0.4,
+  jellyGrav: 1,
+  jellyMode: 'poke',
   drive: true,
 };
 
@@ -1400,6 +2071,9 @@ bindRange('drop-wet', (v) => v.toFixed(2), (v) => {
   syncDropShapeChips();
 });
 bindRange('drop-skin', (v) => v.toFixed(2), (v) => { ui.dropSkin = v; });
+bindRange('jelly-stiff', (v) => v.toFixed(2), (v) => { ui.jellyStiff = v; });
+bindRange('jelly-damp', (v) => v.toFixed(2), (v) => { ui.jellyDamp = v; });
+bindRange('jelly-grav', (v) => v.toFixed(2), (v) => { ui.jellyGrav = v; });
 
 function syncDropShapeChips() {
   const bead = ui.dropWet < 0.34;
@@ -1476,6 +2150,74 @@ function endDropGrab() {
 }
 dropEl.addEventListener('pointerup', endDropGrab);
 dropEl.addEventListener('pointercancel', endDropGrab);
+
+document.querySelectorAll('[data-jelly-mode]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    ui.jellyMode = btn.dataset.jellyMode;
+    jellyScene.userData.controls.enabled = ui.jellyMode === 'orbit';
+    jellyScene.userData.element.classList.toggle('mode-pull', ui.jellyMode === 'poke');
+    if (ui.jellyMode !== 'poke') jelly.releaseGrab();
+    document.querySelectorAll('[data-jelly-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+  });
+});
+
+document.getElementById('jelly-drop').addEventListener('click', () => {
+  jelly.dropFrom(1.25);
+});
+document.getElementById('jelly-reset').addEventListener('click', () => {
+  jelly.reset();
+  if (motionOK()) {
+    for (let i = 0; i < 48; i++) {
+      jelly.step(1 / 60, { stiff: ui.jellyStiff, damp: ui.jellyDamp, gravity: ui.jellyGrav });
+    }
+  }
+  jelly.sync();
+  const spread = Math.max(0.7, Math.min(1.85, jelly.foot / jelly.restFoot));
+  jellyShadow.scale.set(spread, spread, 1);
+});
+
+const jellyEl = document.querySelector('[data-scene="jelly"]');
+jellyEl.addEventListener('pointerdown', (e) => {
+  if (ui.jellyMode !== 'poke') return;
+  ndcFromEvent(e, jellyEl);
+  raycaster.setFromCamera(ndc, jellyScene.userData.camera);
+  const hits = raycaster.intersectObject(jelly.mesh, false);
+  if (!hits.length || !hits[0].face) return;
+  const face = hits[0].face;
+  const p = hits[0].point;
+  let best = face.a;
+  let bestD = Infinity;
+  for (const idx of [face.a, face.b, face.c]) {
+    const o = idx * 3;
+    const d = (jelly.pos[o] - p.x) ** 2 + (jelly.pos[o + 1] - p.y) ** 2 + (jelly.pos[o + 2] - p.z) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = idx;
+    }
+  }
+  if (!jelly.grabAt(best)) return;
+  jellyEl.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+jellyEl.addEventListener('pointermove', (e) => {
+  if (jelly.grab < 0 || ui.jellyMode !== 'poke') return;
+  ndcFromEvent(e, jellyEl);
+  raycaster.setFromCamera(ndc, jellyScene.userData.camera);
+  const o = jelly.grab * 3;
+  grabHit.set(jelly.pos[o], jelly.pos[o + 1], jelly.pos[o + 2]);
+  jellyScene.userData.camera.getWorldDirection(camForward);
+  grabPlane.setFromNormalAndCoplanarPoint(camForward, grabHit);
+  if (!raycaster.ray.intersectPlane(grabPlane, grabHit)) return;
+  jelly.moveGrab(grabHit.x, grabHit.y, grabHit.z);
+  jelly.sync();
+  const spread = Math.max(0.7, Math.min(1.85, jelly.foot / jelly.restFoot));
+  jellyShadow.scale.set(spread, spread, 1);
+});
+function endJellyGrab() {
+  jelly.releaseGrab();
+}
+jellyEl.addEventListener('pointerup', endJellyGrab);
+jellyEl.addEventListener('pointercancel', endJellyGrab);
 
 document.querySelectorAll('[data-wave]').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -1698,6 +2440,21 @@ dropScene.userData.update = (t, dt) => {
   drop.sync();
 };
 
+jellyScene.userData.update = (_t, dt) => {
+  const userLive = jelly.grab >= 0 || performance.now() < jelly.liveUntil;
+  if (motionOK() || userLive) {
+    jelly.step(Math.min(dt, 0.033), {
+      stiff: ui.jellyStiff,
+      damp: ui.jellyDamp,
+      gravity: ui.jellyGrav,
+    });
+  }
+  jelly.sync();
+  const spread = Math.max(0.7, Math.min(1.85, jelly.foot / jelly.restFoot));
+  jellyShadow.scale.set(spread, spread, 1);
+  jellyShadow.material.opacity = 0.26 + Math.min(0.18, Math.max(0, spread - 1) * 0.35);
+};
+
 /* ——— Render loop (single context, scissor per element) ——— */
 let visible = !document.hidden;
 document.addEventListener('visibilitychange', () => {
@@ -1778,6 +2535,7 @@ window.__SML = {
   cloth,
   flow,
   drop,
+  jelly,
   ui,
   get frameCount() { return frameCount; },
   get reducedMotion() { return reducedMotion; },
