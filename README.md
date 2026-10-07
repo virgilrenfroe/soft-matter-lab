@@ -30,6 +30,8 @@ Railway is the live host. `Dockerfile`, `Caddyfile`, and `railway.toml` are read
 
 **12. Non-Newtonian** — a pale cornstarch-style mix in a shallow tray. A slow poke sinks and leaves a wide dimple. A hard poke meets a surface that holds. The same liquid. The rate of the push changes it. A ball lowered slowly sinks. The same ball, dropped fast, stays on top. With reduced motion or `?still=1`, the tray opens on a slow dimple beside a firm strike and holds still. Slow poke, Hard poke, and a press on the mix still run when someone asks.
 
+**13. Pressure with depth** — a tall tank of one liquid. Soft panels on the wall bulge more as they sit deeper. The same liquid, the same density. Only the depth changes the push. Move the probe from Shallow to Deep, or lower the fill, and the bulge follows. With reduced motion or `?still=1`, the tank holds still on a full column. Shallow, Mid, Deep, and the sliders still run when someone asks.
+
 ## Local
 
 ```bash
