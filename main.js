@@ -1727,6 +1727,259 @@ class SoftBody {
   }
 }
 
+/* ——— Particle medium: a transverse pulse on a tray of beads ——— */
+
+class ParticleMedium {
+  constructor(cols, rows, width, depth) {
+    this.cols = cols;
+    this.rows = rows;
+    this.width = width;
+    this.depth = depth;
+    this.count = cols * rows;
+    this.y = new Float32Array(this.count);
+    this.v = new Float32Array(this.count);
+    this.next = new Float32Array(this.count);
+    this.homeX = new Float32Array(this.count);
+    this.homeZ = new Float32Array(this.count);
+    this.dx = width / (cols - 1);
+    this.dz = depth / (rows - 1);
+    this.radius = Math.min(this.dx, this.dz) * 0.42;
+    this.restY = 0.26;
+    this.phase = 0.35;
+    this.pulseT = 0;
+    this.pulseDur = 0.55;
+    this.driveAmp = 0;
+    this.acc = 0;
+    this.restSynced = false;
+
+    const x0 = -width / 2;
+    const z0 = -depth / 2;
+    for (let iz = 0; iz < rows; iz++) {
+      for (let ix = 0; ix < cols; ix++) {
+        const i = iz * cols + ix;
+        this.homeX[i] = x0 + ix * this.dx;
+        this.homeZ[i] = z0 + iz * this.dz;
+      }
+    }
+
+    const mid = Math.floor((rows - 1) / 2);
+    this.markerIds = [0.18, 0.38, 0.56, 0.74].map((f) => {
+      const ix = Math.max(2, Math.min(cols - 4, Math.round(f * (cols - 1))));
+      return mid * cols + ix;
+    });
+    this.markerSet = new Set(this.markerIds);
+
+    const geo = new THREE.SphereGeometry(this.radius, 12, 9);
+    const mat = new THREE.MeshStandardMaterial({
+      roughness: 0.28,
+      metalness: 0.08,
+      envMapIntensity: 1.12,
+    });
+    this.mesh = new THREE.InstancedMesh(geo, mat, this.count);
+    this.mesh.frustumCulled = false;
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+    this.cLow = new THREE.Color(0x12343c);
+    this.cMid = new THREE.Color(0xa7c3d0);
+    this.cHigh = new THREE.Color(0xfff3e6);
+    this.tmp = new THREE.Color();
+    this._dummy = new THREE.Object3D();
+
+    const markerColors = [0xff5a1f, 0xffc857, 0x7ec8ff, 0xc8f542];
+    this.markers = this.markerIds.map((index, m) => {
+      const color = markerColors[m];
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(this.radius * 1.42, 18, 14),
+        new THREE.MeshStandardMaterial({
+          color,
+          emissive: color,
+          emissiveIntensity: 0.5,
+          roughness: 0.32,
+          metalness: 0.08,
+        })
+      );
+      const home = new THREE.Mesh(
+        new THREE.RingGeometry(this.radius * 0.85, this.radius * 1.85, 28),
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.92,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        })
+      );
+      home.rotation.x = -Math.PI / 2;
+      home.position.set(this.homeX[index], 0.012, this.homeZ[index]);
+      return { mesh, home, index, color };
+    });
+
+    this.bar = new THREE.Mesh(
+      new THREE.BoxGeometry(0.075, 0.34, depth * 0.76),
+      new THREE.MeshStandardMaterial({
+        color: 0xff5a1f,
+        roughness: 0.4,
+        metalness: 0.12,
+        emissive: 0xff5a1f,
+        emissiveIntensity: 0.3,
+      })
+    );
+    this.bar.position.set(x0 - this.radius - 0.06, this.restY, 0);
+    this.sync(0);
+  }
+
+  startPulse(tempo) {
+    const tempoSafe = Math.max(0.35, tempo || 0.7);
+    this.pulseDur = 0.58 / tempoSafe;
+    this.pulseT = this.pulseDur;
+  }
+
+  poke(x, z, mag) {
+    const sigma = this.dx * 1.15;
+    const reach = sigma * 3.1;
+    const r2 = reach * reach;
+    for (let i = 0; i < this.count; i++) {
+      const dx = this.homeX[i] - x;
+      const dz = this.homeZ[i] - z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < r2) this.v[i] += mag * Math.exp(-d2 / (2 * sigma * sigma));
+    }
+  }
+
+  _hot() {
+    if (this.pulseT > 0) return true;
+    for (let i = 0; i < this.count; i++) {
+      if (this.y[i] * this.y[i] + this.v[i] * this.v[i] > 8e-6) return true;
+    }
+    return false;
+  }
+
+  _setColumn(ix, value) {
+    for (let iz = 0; iz < this.rows; iz++) {
+      const i = iz * this.cols + ix;
+      const nz = (iz / (this.rows - 1)) * 2 - 1;
+      const env = Math.cos(nz * Math.PI * 0.5);
+      this.y[i] = value * env;
+      this.v[i] = 0;
+    }
+  }
+
+  _substep(dt, c2, dampUser) {
+    const { cols, rows, y, v, next } = this;
+    const invDx2 = 1 / (this.dx * this.dx);
+    const invDz2 = 1 / (this.dz * this.dz);
+    const base = 0.0016 + dampUser * 0.011;
+
+    for (let iz = 0; iz < rows; iz++) {
+      const zDown = iz > 0 ? -cols : cols;
+      const zUp = iz + 1 < rows ? cols : -cols;
+      for (let ix = 1; ix < cols - 1; ix++) {
+        const id = iz * cols + ix;
+        const left = y[id - 1];
+        const right = y[id + 1];
+        const down = y[id + zDown];
+        const up = y[id + zUp];
+        const lap = (left + right - 2 * y[id]) * invDx2 + (down + up - 2 * y[id]) * invDz2;
+        let damp = base;
+        const u = (ix / (cols - 1) - 0.84) / 0.16;
+        if (u > 0) damp += u * u * 0.14;
+        let vel = v[id] * (1 - damp) + c2 * lap * dt - 3.2 * y[id] * dt;
+        let disp = y[id] + vel * dt;
+        if (disp > 0.32) {
+          disp = 0.32;
+          vel *= 0.25;
+        } else if (disp < -0.14) {
+          disp = -0.14;
+          vel *= 0.25;
+        }
+        next[id] = disp;
+        v[id] = vel;
+      }
+    }
+    for (let iz = 0; iz < rows; iz++) {
+      for (let ix = 1; ix < cols - 1; ix++) {
+        const id = iz * cols + ix;
+        y[id] = next[id];
+      }
+      const end = iz * cols + cols - 1;
+      const prev = end - 1;
+      y[end] = y[prev] * 0.12;
+      v[end] = v[prev] * 0.12;
+    }
+  }
+
+  step(frameDt, opts) {
+    const motion = !!opts.motion;
+    const continuous = motion && opts.mode === 'continuous';
+    if (!continuous && !this._hot()) {
+      if (!this.restSynced) {
+        this.driveAmp = 0;
+        this.sync(0);
+        this.restSynced = true;
+      }
+      return;
+    }
+    this.restSynced = false;
+
+    const frame = Math.min(frameDt, 0.033);
+    const tempo = Math.max(0.35, opts.tempo || 0.7);
+    const amp = 0.24;
+    const c2 = Math.max(0, opts.coupling) ** 2 * 34;
+
+    if (continuous) {
+      this.phase += Math.PI * 2 * tempo * 0.78 * frame;
+      this.driveAmp = amp * Math.sin(this.phase);
+      this.pulseT = 0;
+    } else if (this.pulseT > 0) {
+      const u = 1 - this.pulseT / this.pulseDur;
+      const w = Math.max(0, Math.min(1, u));
+      this.driveAmp = amp * Math.sin(Math.PI * w);
+      this.pulseT = Math.max(0, this.pulseT - frame);
+    } else {
+      this.driveAmp = 0;
+    }
+
+    this.acc = Math.min(this.acc + frame, 5 / 120);
+    const hdt = 1 / 120;
+    let n = 0;
+    while (this.acc >= hdt && n < 5) {
+      this._setColumn(0, this.driveAmp);
+      this._substep(hdt, c2, opts.damp);
+      this.acc -= hdt;
+      n++;
+    }
+    this._setColumn(0, this.driveAmp);
+    this.sync(this.driveAmp);
+  }
+
+  sync(driveAmp = 0) {
+    const { y, homeX, homeZ, restY, mesh, tmp, cLow, cMid, cHigh } = this;
+    for (let i = 0; i < this.count; i++) {
+      if (this.markerSet.has(i)) {
+        this._dummy.position.set(homeX[i], -8, homeZ[i]);
+        this._dummy.scale.setScalar(0.0001);
+        tmp.set(0x000000);
+      } else {
+        this._dummy.position.set(homeX[i], restY + y[i], homeZ[i]);
+        this._dummy.scale.setScalar(1);
+        const t = Math.max(-1, Math.min(1, y[i] / 0.18));
+        if (t >= 0) tmp.copy(cMid).lerp(cHigh, t);
+        else tmp.copy(cMid).lerp(cLow, -t);
+        tmp.multiplyScalar(0.94 + ((i * 13) % 5) * 0.015);
+      }
+      this._dummy.updateMatrix();
+      mesh.setMatrixAt(i, this._dummy.matrix);
+      mesh.setColorAt(i, tmp);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+
+    for (const m of this.markers) {
+      const i = m.index;
+      m.mesh.position.set(homeX[i], restY + y[i], homeZ[i]);
+    }
+    this.bar.position.y = restY + driveAmp * 0.92;
+  }
+}
 /* ——— Build specimens ——— */
 
 const waveCols = narrowAtStart ? 40 : 68;
@@ -2022,6 +2275,57 @@ jellyScene.add(jellyShadow);
 jellyScene.add(jelly.mesh);
 for (const m of jelly.markers) jellyScene.add(m.mesh);
 
+const medW = 4.2;
+const medD = 2.4;
+const medCols = narrowAtStart ? 16 : 26;
+const medRows = narrowAtStart ? 10 : 15;
+const medium = new ParticleMedium(medCols, medRows, medW, medD);
+const mediumScene = makeScene(document.querySelector('[data-scene="medium"]'), {
+  bg: 0x101216,
+  px: -0.15,
+  py: 2.05,
+  pz: 3.05,
+  tx: -0.05,
+  ty: 0.16,
+  tz: 0,
+  fov: 34,
+  minDist: 1.7,
+  maxDist: 8,
+});
+mediumScene.userData.controls.enabled = false;
+mediumScene.userData.controls.maxPolarAngle = Math.PI * 0.46;
+mediumScene.userData.controls.minPolarAngle = 0.35;
+addKeyLight(mediumScene, 0xfff1e4, 2.65);
+const mediumRim = new THREE.DirectionalLight(0x8ec8ff, 0.95);
+mediumRim.position.set(-2.6, 2.2, -1.6);
+mediumScene.add(mediumRim);
+const mediumFill = new THREE.DirectionalLight(0xff9d2c, 0.35);
+mediumFill.position.set(2.4, 1.1, 2.2);
+mediumScene.add(mediumFill);
+const trayMat = new THREE.MeshStandardMaterial({ color: 0x10161b, roughness: 0.9, metalness: 0.05 });
+const tray = new THREE.Mesh(new THREE.BoxGeometry(medW + 0.72, 0.08, medD + 0.56), trayMat);
+tray.position.y = -0.04;
+mediumScene.add(tray);
+const lipMat = new THREE.MeshStandardMaterial({ color: 0x6d4b32, roughness: 0.7, metalness: 0.05 });
+const lipH = 0.11;
+const lipT = 0.07;
+const lips = [
+  [medW + 0.72, lipH, lipT, 0, lipH / 2, -(medD + 0.56) / 2],
+  [medW + 0.72, lipH, lipT, 0, lipH / 2, (medD + 0.56) / 2],
+  [lipT, lipH, medD + 0.56, -(medW + 0.72) / 2, lipH / 2, 0],
+  [lipT, lipH, medD + 0.56, (medW + 0.72) / 2, lipH / 2, 0],
+];
+for (const w of lips) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w[0], w[1], w[2]), lipMat);
+  mesh.position.set(w[3], w[4], w[5]);
+  mediumScene.add(mesh);
+}
+mediumScene.add(medium.mesh);
+mediumScene.add(medium.bar);
+for (const m of medium.markers) {
+  mediumScene.add(m.home);
+  mediumScene.add(m.mesh);
+}
 /* ——— UI state ——— */
 
 const ui = {
@@ -2042,6 +2346,11 @@ const ui = {
   jellyDamp: 0.4,
   jellyGrav: 1,
   jellyMode: 'poke',
+  mediumDrive: 'continuous',
+  mediumPointer: 'poke',
+  mediumCoupling: 0.48,
+  mediumDamp: 0.16,
+  mediumTempo: 0.7,
   drive: true,
 };
 
@@ -2074,6 +2383,9 @@ bindRange('drop-skin', (v) => v.toFixed(2), (v) => { ui.dropSkin = v; });
 bindRange('jelly-stiff', (v) => v.toFixed(2), (v) => { ui.jellyStiff = v; });
 bindRange('jelly-damp', (v) => v.toFixed(2), (v) => { ui.jellyDamp = v; });
 bindRange('jelly-grav', (v) => v.toFixed(2), (v) => { ui.jellyGrav = v; });
+bindRange('medium-couple', (v) => v.toFixed(2), (v) => { ui.mediumCoupling = v; });
+bindRange('medium-damp', (v) => v.toFixed(2), (v) => { ui.mediumDamp = v; });
+bindRange('medium-tempo', (v) => v.toFixed(2), (v) => { ui.mediumTempo = v; });
 
 function syncDropShapeChips() {
   const bead = ui.dropWet < 0.34;
@@ -2219,6 +2531,68 @@ function endJellyGrab() {
 jellyEl.addEventListener('pointerup', endJellyGrab);
 jellyEl.addEventListener('pointercancel', endJellyGrab);
 
+document.querySelectorAll('[data-medium]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    ui.mediumDrive = btn.dataset.medium;
+    if (ui.mediumDrive === 'continuous') medium.pulseT = 0;
+    else medium.startPulse(ui.mediumTempo);
+    document.querySelectorAll('[data-medium]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+  });
+});
+
+document.querySelectorAll('[data-medium-mode]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    ui.mediumPointer = btn.dataset.mediumMode;
+    mediumScene.userData.controls.enabled = ui.mediumPointer === 'orbit';
+    mediumScene.userData.element.classList.toggle('mode-pull', ui.mediumPointer === 'poke');
+    document.querySelectorAll('[data-medium-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+  });
+});
+
+const mediumEl = document.querySelector('[data-scene="medium"]');
+const mediumPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -medium.restY);
+let mediumDown = null;
+mediumEl.addEventListener('pointerdown', (e) => {
+  if (ui.mediumPointer !== 'poke') return;
+  mediumDown = { x: e.clientX, y: e.clientY };
+});
+mediumEl.addEventListener('pointerup', (e) => {
+  if (!mediumDown || ui.mediumPointer !== 'poke') {
+    mediumDown = null;
+    return;
+  }
+  const dx = e.clientX - mediumDown.x;
+  const dy = e.clientY - mediumDown.y;
+  mediumDown = null;
+  if (dx * dx + dy * dy > 64) return;
+  ndcFromEvent(e, mediumEl);
+  raycaster.setFromCamera(ndc, mediumScene.userData.camera);
+  const targets = medium.markers.map((m) => m.mesh);
+  targets.push(medium.mesh);
+  const hits = raycaster.intersectObjects(targets, false);
+  let x = null;
+  let z = null;
+  if (hits.length) {
+    const hit = hits[0];
+    const marker = medium.markers.find((m) => m.mesh === hit.object);
+    if (marker) {
+      x = medium.homeX[marker.index];
+      z = medium.homeZ[marker.index];
+    } else if (hit.instanceId != null) {
+      x = medium.homeX[hit.instanceId];
+      z = medium.homeZ[hit.instanceId];
+    } else {
+      x = hit.point.x;
+      z = hit.point.z;
+    }
+  } else if (raycaster.ray.intersectPlane(mediumPlane, grabHit)) {
+    x = grabHit.x;
+    z = grabHit.z;
+  }
+  if (x == null) return;
+  if (Math.abs(x) > medW * 0.52 || Math.abs(z) > medD * 0.52) return;
+  medium.poke(x, z, 2.6);
+});
 document.querySelectorAll('[data-wave]').forEach((btn) => {
   btn.addEventListener('click', () => {
     ui.waveDrive = btn.dataset.wave === 'continuous';
@@ -2455,6 +2829,15 @@ jellyScene.userData.update = (_t, dt) => {
   jellyShadow.material.opacity = 0.26 + Math.min(0.18, Math.max(0, spread - 1) * 0.35);
 };
 
+mediumScene.userData.update = (_t, dt) => {
+  medium.step(dt, {
+    coupling: ui.mediumCoupling,
+    damp: ui.mediumDamp,
+    tempo: ui.mediumTempo,
+    mode: ui.mediumDrive,
+    motion: motionOK(),
+  });
+};
 /* ——— Render loop (single context, scissor per element) ——— */
 let visible = !document.hidden;
 document.addEventListener('visibilitychange', () => {
@@ -2536,6 +2919,7 @@ window.__SML = {
   flow,
   drop,
   jelly,
+  medium,
   ui,
   get frameCount() { return frameCount; },
   get reducedMotion() { return reducedMotion; },
