@@ -1980,6 +1980,353 @@ class ParticleMedium {
     this.bar.position.y = restY + driveAmp * 0.92;
   }
 }
+/* ——— Buoyancy: same-size blocks, float or sink ——— */
+
+class BuoyLab {
+  constructor() {
+    this.surface = 1.42;
+    this.floorY = 0.006;
+    this.g = 8;
+    this.halfH = 0.36;
+    this.halfW = 0.19;
+    this.dropY = 1.78;
+    this.fluid = 1;
+    this.bodies = [
+      { id: 'wood', x: -0.7, density: 0.38, y: 0, vy: 0, settled: true },
+      { id: 'sample', x: 0, density: 0.74, y: 0, vy: 0, settled: true },
+      { id: 'metal', x: 0.7, density: 2.4, y: 0, vy: 0, settled: true },
+    ];
+    this.oilColor = new THREE.Color(0xc4843a);
+    this.waterColor = new THREE.Color(0x127684);
+    this.deepColor = new THREE.Color(0x0c4a5c);
+    this.oilSkin = new THREE.Color(0xffe3b0);
+    this.waterSkin = new THREE.Color(0xd8fff6);
+    this.oilEmit = new THREE.Color(0xc47a28);
+    this.waterEmit = new THREE.Color(0x1a8f8a);
+    this.placeAtRest();
+  }
+
+  height() {
+    return this.halfH * 2;
+  }
+
+  equilibriumY(density, fluid) {
+    const h = this.height();
+    const ratio = density / Math.max(0.2, fluid);
+    if (ratio >= 1) return this.floorY + this.halfH;
+    const submerged = ratio * h;
+    return Math.max(this.floorY + this.halfH, this.surface - submerged + this.halfH);
+  }
+
+  submergedFraction(y) {
+    const h = this.height();
+    const bottom = y - this.halfH;
+    const sub = Math.min(h, Math.max(0, this.surface - bottom));
+    return sub / h;
+  }
+
+  placeAtRest() {
+    for (const b of this.bodies) {
+      b.y = this.equilibriumY(b.density, this.fluid);
+      b.vy = 0;
+      b.settled = true;
+    }
+  }
+
+  setSampleDensity(d) {
+    this.bodies[1].density = d;
+    this.bodies[1].settled = false;
+  }
+
+  setFluid(f) {
+    this.fluid = f;
+    for (const b of this.bodies) b.settled = false;
+  }
+
+  drop(id) {
+    for (const b of this.bodies) {
+      if (id && b.id !== id) continue;
+      b.y = this.dropY;
+      b.vy = 0;
+      b.settled = false;
+    }
+  }
+
+  anyMoving() {
+    return this.bodies.some((b) => !b.settled);
+  }
+
+  step(dt) {
+    let left = Math.min(Math.max(dt, 0), 0.05);
+    while (left > 1e-5) {
+      const h = Math.min(0.016, left);
+      this._integrate(h);
+      left -= h;
+    }
+  }
+
+  _integrate(h) {
+    for (const b of this.bodies) {
+      if (b.settled) continue;
+      const frac = this.submergedFraction(b.y);
+      const acc = ((this.fluid * frac - b.density) / Math.max(0.2, b.density)) * this.g;
+      b.vy += acc * h;
+      b.vy *= Math.exp(-(1.15 + frac * 3.1) * h);
+      if (b.vy > 4.2) b.vy = 4.2;
+      if (b.vy < -4.2) b.vy = -4.2;
+      b.y += b.vy * h;
+      const minY = this.floorY + this.halfH;
+      if (b.y < minY) {
+        b.y = minY;
+        if (b.vy < 0) b.vy = 0;
+      }
+      if (b.y > this.dropY + 0.08) {
+        b.y = this.dropY + 0.08;
+        if (b.vy > 0) b.vy = 0;
+      }
+      const eq = this.equilibriumY(b.density, this.fluid);
+      if (Math.abs(b.vy) < 0.02 && Math.abs(b.y - eq) < 0.02) {
+        b.vy = 0;
+        b.settled = true;
+      }
+    }
+  }
+
+  arrowLength(mag) {
+    if (mag <= 0.03) return 0;
+    return Math.sqrt(mag / 2.4) * 0.62;
+  }
+
+  mount(scene) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6d4b32, roughness: 0.68, metalness: 0.05 });
+    const glass = new THREE.MeshStandardMaterial({
+      color: 0xd7e7f2,
+      transparent: true,
+      opacity: 0.12,
+      roughness: 0.04,
+      metalness: 0.08,
+      envMapIntensity: 1.15,
+      depthWrite: false,
+    });
+    const postH = 2.58;
+    const postY = 1.2;
+    for (const x of [-1.66, 1.66]) {
+      for (const z of [-0.72, 0.72]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.09, postH, 0.09), wood);
+        post.position.set(x, postY, z);
+        scene.add(post);
+      }
+    }
+    const back = new THREE.Mesh(
+      new THREE.BoxGeometry(3.16, 2.42, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0x10161a, roughness: 0.92, metalness: 0.04 })
+    );
+    back.position.set(0, 1.2, -0.66);
+    scene.add(back);
+    const floor = new THREE.Mesh(
+      new THREE.BoxGeometry(3.12, 0.08, 1.26),
+      new THREE.MeshStandardMaterial({ color: 0x121c20, roughness: 0.88, metalness: 0.06 })
+    );
+    floor.position.set(0, -0.04, 0);
+    scene.add(floor);
+    const plinth = new THREE.Mesh(
+      new THREE.BoxGeometry(3.72, 0.16, 1.78),
+      wood
+    );
+    plinth.position.y = -0.18;
+    scene.add(plinth);
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(2.7, 40),
+      new THREE.MeshStandardMaterial({ color: 0x12161a, roughness: 0.96, metalness: 0.02, envMapIntensity: 0.25 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.28;
+    scene.add(ground);
+
+    const addGlass = (w, h, d, x, y, z) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), glass);
+      mesh.position.set(x, y, z);
+      mesh.renderOrder = 4;
+      scene.add(mesh);
+    };
+    addGlass(3.16, 2.42, 0.018, 0, 1.2, 0.7);
+    addGlass(0.018, 2.42, 1.3, -1.62, 1.2, 0);
+    addGlass(0.018, 2.42, 1.3, 1.62, 1.2, 0);
+    const lip = (w, h, d, x, y, z) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wood);
+      mesh.position.set(x, y, z);
+      scene.add(mesh);
+    };
+    lip(3.4, 0.07, 0.1, 0, 2.44, 0.7);
+    lip(3.4, 0.07, 0.1, 0, 2.44, -0.7);
+    lip(0.1, 0.07, 1.32, -1.66, 2.44, 0);
+    lip(0.1, 0.07, 1.32, 1.66, 2.44, 0);
+
+    this.waterMat = new THREE.MeshStandardMaterial({
+      color: this.waterColor.clone(),
+      transparent: true,
+      opacity: 0.38,
+      roughness: 0.06,
+      metalness: 0.06,
+      envMapIntensity: 0.85,
+      depthWrite: false,
+    });
+    const water = new THREE.Mesh(new THREE.BoxGeometry(3.05, this.surface, 1.2), this.waterMat);
+    water.position.set(0, this.surface / 2, 0);
+    water.renderOrder = 2;
+    scene.add(water);
+
+    this.skinMat = new THREE.MeshStandardMaterial({
+      color: this.waterSkin.clone(),
+      emissive: this.waterEmit.clone(),
+      emissiveIntensity: 0.42,
+      transparent: true,
+      opacity: 0.72,
+      roughness: 0.08,
+      metalness: 0.12,
+      envMapIntensity: 1,
+      depthWrite: false,
+    });
+    const skin = new THREE.Mesh(new THREE.PlaneGeometry(3.05, 1.2), this.skinMat);
+    skin.rotation.x = -Math.PI / 2;
+    skin.position.y = this.surface + 0.012;
+    skin.renderOrder = 3;
+    scene.add(skin);
+
+    this.lineMat = new THREE.MeshStandardMaterial({
+      color: this.waterSkin.clone(),
+      emissive: this.waterEmit.clone(),
+      emissiveIntensity: 0.85,
+      roughness: 0.3,
+    });
+    const line = new THREE.Mesh(new THREE.BoxGeometry(3.02, 0.02, 0.025), this.lineMat);
+    line.position.set(0, this.surface + 0.012, 0.73);
+    scene.add(line);
+
+    const looks = [
+      { color: 0xd08a45, roughness: 0.74, metalness: 0.04, emissive: 0x3a2410, emissiveIntensity: 0.12 },
+      { color: 0xf4efe6, roughness: 0.32, metalness: 0.05, emissive: 0x8ec8ff, emissiveIntensity: 0.08 },
+      { color: 0xa8b1ba, roughness: 0.24, metalness: 0.9, emissive: 0x2a3036, emissiveIntensity: 0.18 },
+    ];
+    const shaftGeo = new THREE.CylinderGeometry(0.015, 0.015, 1, 8);
+    shaftGeo.translate(0, 0.5, 0);
+    const headGeo = new THREE.ConeGeometry(0.048, 0.1, 10);
+    const upMat = new THREE.MeshStandardMaterial({
+      color: 0xe8ff6a,
+      emissive: 0xe8ff6a,
+      emissiveIntensity: 0.72,
+      roughness: 0.32,
+    });
+    const downMat = new THREE.MeshStandardMaterial({
+      color: 0xff9d2c,
+      emissive: 0xff9d2c,
+      emissiveIntensity: 0.55,
+      roughness: 0.34,
+    });
+    const makeArrow = (mat, down) => {
+      const group = new THREE.Group();
+      const shaft = new THREE.Mesh(shaftGeo, mat);
+      const head = new THREE.Mesh(headGeo, mat);
+      group.add(shaft, head);
+      if (down) group.rotation.x = Math.PI;
+      group.userData.shaft = shaft;
+      group.userData.head = head;
+      scene.add(group);
+      return group;
+    };
+
+    this.meshes = [];
+    this.upArrows = [];
+    this.downArrows = [];
+    this.shadows = [];
+    this.pickMeshes = [];
+    for (let i = 0; i < this.bodies.length; i++) {
+      const body = this.bodies[i];
+      const look = looks[i];
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(this.halfW * 2, this.halfH * 2, this.halfW * 2),
+        new THREE.MeshStandardMaterial(look)
+      );
+      mesh.userData.blockId = body.id;
+      if (body.id === 'sample') {
+        const tape = new THREE.Mesh(
+          new THREE.BoxGeometry(this.halfW * 2 + 0.012, 0.028, 0.07),
+          new THREE.MeshStandardMaterial({
+            color: 0xff9d2c,
+            emissive: 0xff9d2c,
+            emissiveIntensity: 0.4,
+            roughness: 0.4,
+          })
+        );
+        tape.position.y = this.halfH + 0.008;
+        tape.userData.blockId = body.id;
+        mesh.add(tape);
+      }
+      scene.add(mesh);
+      this.meshes.push(mesh);
+      this.pickMeshes.push(mesh);
+      this.upArrows.push(makeArrow(upMat, false));
+      this.downArrows.push(makeArrow(downMat, true));
+      const shadow = new THREE.Mesh(
+        new THREE.CircleGeometry(0.22, 20),
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false })
+      );
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.position.y = 0.012;
+      shadow.renderOrder = 1;
+      scene.add(shadow);
+      this.shadows.push(shadow);
+    }
+    this.sync(0, false);
+    return this;
+  }
+
+  _setArrow(group, length) {
+    const show = length > 0.06;
+    group.visible = show;
+    if (!show) return;
+    const shaftLen = Math.max(0.05, length - 0.08);
+    group.userData.shaft.scale.y = shaftLen;
+    group.userData.head.position.y = shaftLen + 0.01;
+  }
+
+  paintFluid() {
+    const t = Math.min(1, Math.max(0, (this.fluid - 0.6) / 0.4));
+    this.waterMat.color.copy(this.oilColor).lerp(this.waterColor, t);
+    if (this.fluid > 1) this.waterMat.color.lerp(this.deepColor, Math.min(1, (this.fluid - 1) / 0.2));
+    this.skinMat.color.copy(this.oilSkin).lerp(this.waterSkin, t);
+    this.skinMat.emissive.copy(this.oilEmit).lerp(this.waterEmit, t);
+    this.lineMat.color.copy(this.skinMat.color);
+    this.lineMat.emissive.copy(this.skinMat.emissive);
+  }
+
+  sync(time, motion) {
+    this.paintFluid();
+    const pulse = motion ? 0.4 + Math.sin(time * 0.8) * 0.07 : 0.36;
+    this.skinMat.emissiveIntensity = pulse;
+    for (let i = 0; i < this.bodies.length; i++) {
+      const b = this.bodies[i];
+      this.meshes[i].position.set(b.x, b.y, 0);
+      const frac = this.submergedFraction(b.y);
+      const upLen = this.arrowLength(this.fluid * frac);
+      const downLen = this.arrowLength(b.density);
+      const up = this.upArrows[i];
+      const down = this.downArrows[i];
+      up.position.set(b.x + 0.26, b.y, 0.48);
+      down.position.set(b.x - 0.26, b.y, 0.48);
+      this._setArrow(up, upLen);
+      this._setArrow(down, downLen);
+      const lift = Math.max(0, b.y - this.halfH - this.floorY);
+      const fade = Math.min(1, lift / 0.9);
+      const shadow = this.shadows[i];
+      shadow.position.x = b.x;
+      shadow.position.z = 0;
+      shadow.material.opacity = 0.34 * (1 - fade);
+      const s = 1 - fade * 0.35;
+      shadow.scale.setScalar(s);
+    }
+  }
+}
 /* ——— Build specimens ——— */
 
 const waveCols = narrowAtStart ? 40 : 68;
@@ -2326,6 +2673,42 @@ for (const m of medium.markers) {
   mediumScene.add(m.home);
   mediumScene.add(m.mesh);
 }
+const buoy = new BuoyLab();
+const buoyScene = makeScene(document.querySelector('[data-scene="buoy"]'), {
+  bg: 0x0e1418,
+  px: 0.15,
+  py: 1.18,
+  pz: 3.48,
+  tx: 0.62,
+  ty: 0.78,
+  tz: 0,
+  fov: 33,
+  minDist: 2.4,
+  maxDist: 7.4,
+});
+buoyScene.userData.controls.minPolarAngle = 0.28;
+buoyScene.userData.controls.maxPolarAngle = 1.28;
+let buoyStacked = null;
+function frameBuoy() {
+  const stacked = window.innerWidth <= 860;
+  if (stacked === buoyStacked) return;
+  buoyStacked = stacked;
+  const controls = buoyScene.userData.controls;
+  const cam = buoyScene.userData.camera;
+  controls.target.set(stacked ? 0 : 0.7, stacked ? 0.88 : 1.08, 0);
+  cam.position.set(stacked ? 0.04 : -0.08, stacked ? 1.18 : 1.52, stacked ? 3.35 : 4.15);
+  controls.update();
+}
+frameBuoy();
+window.addEventListener('resize', frameBuoy);
+addKeyLight(buoyScene, 0xfff1e4, 2.65);
+const buoyRim = new THREE.DirectionalLight(0x8ec8ff, 0.95);
+buoyRim.position.set(-2.4, 2.6, 1.4);
+buoyScene.add(buoyRim);
+const buoyFill = new THREE.DirectionalLight(0xffe2b0, 0.35);
+buoyFill.position.set(1.2, 0.4, 2.4);
+buoyScene.add(buoyFill);
+buoy.mount(buoyScene);
 /* ——— UI state ——— */
 
 const ui = {
@@ -2351,6 +2734,8 @@ const ui = {
   mediumCoupling: 0.48,
   mediumDamp: 0.16,
   mediumTempo: 0.7,
+  buoyDen: 0.74,
+  buoyFluid: 1,
   drive: true,
 };
 
@@ -2386,6 +2771,69 @@ bindRange('jelly-grav', (v) => v.toFixed(2), (v) => { ui.jellyGrav = v; });
 bindRange('medium-couple', (v) => v.toFixed(2), (v) => { ui.mediumCoupling = v; });
 bindRange('medium-damp', (v) => v.toFixed(2), (v) => { ui.mediumDamp = v; });
 bindRange('medium-tempo', (v) => v.toFixed(2), (v) => { ui.mediumTempo = v; });
+bindRange('buoy-den', (v) => v.toFixed(2), (v) => {
+  ui.buoyDen = v;
+  buoy.setSampleDensity(v);
+  syncBuoyChips();
+});
+bindRange('buoy-fluid', (v) => v.toFixed(2), (v) => {
+  ui.buoyFluid = v;
+  buoy.setFluid(v);
+  syncBuoyChips();
+});
+
+function syncBuoyChips() {
+  const blocks = { wood: 0.38, plastic: 0.74, metal: 2.4 };
+  document.querySelectorAll('[data-buoy-block]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(Math.abs(ui.buoyDen - blocks[b.dataset.buoyBlock]) < 0.025));
+  });
+  const fluids = { water: 1, oil: 0.6 };
+  document.querySelectorAll('[data-buoy-fluid]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(Math.abs(ui.buoyFluid - fluids[b.dataset.buoyFluid]) < 0.025));
+  });
+}
+
+document.querySelectorAll('[data-buoy-block]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const den = document.getElementById('buoy-den');
+    const presets = { wood: '0.38', plastic: '0.74', metal: '2.40' };
+    den.value = presets[btn.dataset.buoyBlock];
+    den.dispatchEvent(new Event('input'));
+  });
+});
+
+document.querySelectorAll('[data-buoy-fluid]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const fluid = document.getElementById('buoy-fluid');
+    fluid.value = btn.dataset.buoyFluid === 'water' ? '1' : '0.60';
+    fluid.dispatchEvent(new Event('input'));
+  });
+});
+
+document.getElementById('buoy-drop').addEventListener('click', () => {
+  buoy.drop();
+});
+
+const buoyEl = document.querySelector('[data-scene="buoy"]');
+let buoyDown = null;
+buoyEl.addEventListener('pointerdown', (e) => {
+  buoyDown = { x: e.clientX, y: e.clientY };
+});
+buoyEl.addEventListener('pointerup', (e) => {
+  if (!buoyDown) return;
+  const dx = e.clientX - buoyDown.x;
+  const dy = e.clientY - buoyDown.y;
+  buoyDown = null;
+  if (dx * dx + dy * dy > 64) return;
+  ndcFromEvent(e, buoyEl);
+  raycaster.setFromCamera(ndc, buoyScene.userData.camera);
+  const hits = raycaster.intersectObjects(buoy.pickMeshes, true);
+  if (!hits.length) return;
+  let node = hits[0].object;
+  while (node && !node.userData.blockId) node = node.parent;
+  if (!node || !node.userData.blockId) return;
+  buoy.drop(node.userData.blockId);
+});
 
 function syncDropShapeChips() {
   const bead = ui.dropWet < 0.34;
@@ -2838,6 +3286,10 @@ mediumScene.userData.update = (_t, dt) => {
     motion: motionOK(),
   });
 };
+buoyScene.userData.update = (t, dt) => {
+  if (buoy.anyMoving()) buoy.step(dt);
+  buoy.sync(t, motionOK());
+};
 /* ——— Render loop (single context, scissor per element) ——— */
 let visible = !document.hidden;
 document.addEventListener('visibilitychange', () => {
@@ -2920,6 +3372,7 @@ window.__SML = {
   drop,
   jelly,
   medium,
+  buoy,
   ui,
   get frameCount() { return frameCount; },
   get reducedMotion() { return reducedMotion; },
