@@ -24,6 +24,8 @@ Railway is the live host. `Dockerfile`, `Caddyfile`, and `railway.toml` are read
 
 **09. Viscosity** — two matching balls drop from the same height. The left column stays thin. The right column follows a viscosity slider (or Thin / Syrup / Honey). Gravity is the same push; a thicker liquid resists the fall. With reduced motion or `?still=1`, the columns rest on that comparison. Press Drop and that one fall still runs.
 
+**10. Capillary action** — three wettable glass tubes stand in one dish. The left tube is wide and the right tube is narrow. The middle tube follows a width slider (or Wide / Medium / Narrow). The liquid's skin pulls along the wall, so a narrower opening climbs higher. With reduced motion or `?still=1`, the tubes rest on a finished climb. Press Climb, or change the width, and that one climb still runs.
+
 ## Local
 
 ```bash
