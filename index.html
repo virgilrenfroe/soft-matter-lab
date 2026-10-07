@@ -4,10 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07080e" />
-  <meta name="description" content="Soft Matter Lab — a waves, cloth, flow, and surface-tension exhibit for shop class and intro physics. A crest travels while the material stays. Cloth shares tension. Flow carries ink. A drop's skin pulls it into a bead, or lets it wet out. A soft body changes shape and stays one piece. A pulse travels through a tray of beads; the beads stay." />
+  <meta name="description" content="Soft Matter Lab — a waves, cloth, flow, and surface-tension exhibit for shop class and intro physics. A crest travels while the material stays. Cloth shares tension. Flow carries ink. A drop's skin pulls it into a bead, or lets it wet out. A soft body changes shape and stays one piece. A pulse travels through a tray of beads; the beads stay. Buoyancy is the upward push: same size, density decides float or sink." />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Soft Matter Lab" />
-  <meta property="og:description" content="Soft Matter Lab — a waves, cloth, flow, and surface-tension exhibit for shop class and intro physics. A crest travels while the material stays. Cloth shares tension. Flow carries ink. A drop's skin pulls it into a bead, or lets it wet out. A soft body changes shape and stays one piece. A pulse travels through a tray of beads; the beads stay." />
+  <meta property="og:description" content="Soft Matter Lab — a waves, cloth, flow, and surface-tension exhibit for shop class and intro physics. A crest travels while the material stays. Cloth shares tension. Flow carries ink. A drop's skin pulls it into a bead, or lets it wet out. A soft body changes shape and stays one piece. A pulse travels through a tray of beads; the beads stay. Buoyancy is the upward push: same size, density decides float or sink." />
   <meta property="og:image" content="https://virgilrenfroe.github.io/soft-matter-lab/og.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="628" />
@@ -15,7 +15,7 @@
   <meta property="og:url" content="https://virgilrenfroe.github.io/soft-matter-lab/" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Soft Matter Lab" />
-  <meta name="twitter:description" content="Soft Matter Lab — a waves, cloth, flow, and surface-tension exhibit for shop class and intro physics. A crest travels while the material stays. Cloth shares tension. Flow carries ink. A drop's skin pulls it into a bead, or lets it wet out. A soft body changes shape and stays one piece. A pulse travels through a tray of beads; the beads stay." />
+  <meta name="twitter:description" content="Soft Matter Lab — a waves, cloth, flow, and surface-tension exhibit for shop class and intro physics. A crest travels while the material stays. Cloth shares tension. Flow carries ink. A drop's skin pulls it into a bead, or lets it wet out. A soft body changes shape and stays one piece. A pulse travels through a tray of beads; the beads stay. Buoyancy is the upward push: same size, density decides float or sink." />
   <meta name="twitter:image" content="https://virgilrenfroe.github.io/soft-matter-lab/og.png" />
   <meta name="twitter:image:alt" content="Soft Matter Lab. A crest travels while the float stays. Cloth shares tension. Flow carries ink." />
   <title>Soft Matter Lab</title>
@@ -256,9 +256,12 @@
       position: relative;
       z-index: 1;
       align-self: start;
-      padding-top: 7vh;
+      padding-top: 4vh;
       display: grid;
-      gap: 0.85rem;
+      gap: 0.45rem;
+      max-height: calc(100svh - 8rem);
+      overflow: auto;
+      scrollbar-width: thin;
       grid-column: 2;
       grid-row: 1 / span 2;
       min-height: 0;
@@ -279,15 +282,15 @@
       display: block;
       font-family: var(--display);
       font-weight: 800;
-      font-size: clamp(1.7rem, 2.5vw, 2.55rem);
+      font-size: clamp(1.35rem, 1.9vw, 2.05rem);
       letter-spacing: -0.045em;
       line-height: 0.9;
     }
     .field-notes em {
       display: block;
-      margin-top: 0.3rem;
+      margin-top: 0.12rem;
       font-style: normal;
-      font-size: 14.5px;
+      font-size: 13px;
       color: var(--mute);
       max-width: 28ch;
     }
@@ -694,6 +697,8 @@
         grid-column: auto;
         grid-row: auto;
         min-height: 0;
+        max-height: none;
+        overflow: visible;
       }
       .hero h1 { font-size: clamp(4.2rem, 22vw, 6.4rem); }
       .hero h1 .line-b { margin-left: 0.18em; }
@@ -779,6 +784,7 @@
         <a href="#s05">05 Drop</a>
         <a href="#s06">06 Soft</a>
         <a href="#s07">07 Medium</a>
+        <a href="#s08">08 Float</a>
         <a href="#teachers">Teachers</a>
       </div>
       <span class="hud-live">Watch what stays</span>
@@ -800,9 +806,10 @@
         <li><a href="#s05"><b>Skin</b><strong>Bead</strong><em>The skin pulls a drop into a bead, or lets it wet out.</em></a></li>
         <li><a href="#s06"><b>Soft</b><strong>Body</strong><em>The shape changes. The body stays one piece.</em></a></li>
         <li><a href="#s07"><b>Medium</b><strong>Stuff</strong><em>The stuff a wave moves through.</em></a></li>
+        <li><a href="#s08"><b>Float</b><strong>Push</strong><em>Same size. The fluid pushes up.</em></a></li>
       </ol>
       <div class="hero-foot">
-        <p class="hero-sub">A lab for shop class and intro physics. Waves, cloth, flow, a drop's skin, a soft body, and the stuff a wave moves through. Watch what moves — and what stays.</p>
+        <p class="hero-sub">A lab for shop class and intro physics. Waves, cloth, flow, a drop's skin, a soft body, and how a fluid pushes up. Watch what moves — and what stays.</p>
         <div class="hero-meta">
           <span>HS / intro college</span>
           <span>Tension is shared</span>
@@ -810,6 +817,7 @@
           <span>A drop's skin · bead or wet-out</span>
           <span>Shape changes · body stays one piece</span>
                   <span>Pulse travels · beads stay</span>
+                  <span>Same size · float or sink</span>
         </div>
         <a class="enter" href="#s01">Enter the lab</a>
       </div>
@@ -1236,6 +1244,69 @@
       </div>
     </section>
 
+    <section class="specimen anchor-br" id="s08">
+      <aside class="placard">
+        <div class="placard-stack">
+          <p class="specimen-num">Specimen 08 — Buoyancy</p>
+          <h2 class="specimen-title">The fluid pushes up.</h2>
+          <p class="definition">Buoyancy is the upward push from a fluid. These blocks are the same size, and density decides which one floats and which one sinks.</p>
+          <div class="sheet">
+            <div class="sheet-copy">
+            <p class="notice">Note — buoyancy is that upward push. Same size: more matter sinks.</p>
+            <div class="lesson">
+              <p>Buoyancy is the upward push from the fluid.</p>
+              <p>These blocks are the same size. Warm is wood. Pale is the one you set. Gray is metal.</p>
+              <p>Density is how much matter is in that size. Less than the fluid, and the block floats. More, and it sinks.</p>
+              <p>The yellow arrow is the push up. It grows as more of the block goes under. The orange arrow is the weight.</p>
+              <p>Oil has less matter than water. A block that floats in water can sink in oil.</p>
+            </div>
+            <div class="world">
+              <strong>In the world</strong>
+              <p>A naval architect shapes a hull so the ship pushes aside a weight of water equal to the ship's own weight. A scuba instructor shows a diver how to add or release air so the water's upward push matches the diver and the diver can hover. A hot-air balloon pilot heats the air in the balloon until that air has less matter in the same size than the cool air outside, and the balloon rises.</p>
+            </div>
+            <div class="mistakes">
+              <strong>Common mistakes</strong>
+              <ul>
+                <li>The blocks are not different sizes. Density, not size, decides float or sink.</li>
+                <li>The yellow arrow is not the weight. It is the push up. The orange arrow is the weight.</li>
+                <li>A block that floats in water does not have to float in oil. Oil has less matter than water.</li>
+              </ul>
+            </div>
+            </div>
+            <div class="try">
+              <strong>Try this</strong>
+              <p>Press Drop. Wood stays high. Metal goes to the floor. Set the pale block to Wood, then to Metal. Switch Water to Oil and watch which blocks still float.</p>
+            </div>
+            <div class="chips" role="group" aria-label="Pale block density">
+              <button type="button" class="chip" data-buoy-block="wood" aria-pressed="false">Wood</button>
+              <button type="button" class="chip" data-buoy-block="plastic" aria-pressed="true">Plastic</button>
+              <button type="button" class="chip" data-buoy-block="metal" aria-pressed="false">Metal</button>
+            </div>
+            <div class="chips" role="group" aria-label="Tank fluid">
+              <button type="button" class="chip" data-buoy-fluid="water" aria-pressed="true">Water</button>
+              <button type="button" class="chip" data-buoy-fluid="oil" aria-pressed="false">Oil</button>
+              <button type="button" class="chip" id="buoy-drop">Drop</button>
+            </div>
+            <div class="ctrls">
+              <label class="ctrl">Density
+                <input id="buoy-den" type="range" min="0.2" max="2.8" step="0.01" value="0.74" />
+                <output id="buoy-den-out" for="buoy-den">0.74</output>
+              </label>
+              <label class="ctrl">Fluid
+                <input id="buoy-fluid" type="range" min="0.5" max="1.2" step="0.01" value="1" />
+                <output id="buoy-fluid-out" for="buoy-fluid">1.00</output>
+              </label>
+            </div>
+          </div>
+        </div>
+      </aside>
+      <div class="stage">
+        <p class="ghost-index ghost-tl" aria-hidden="true">08</p>
+        <div class="view-label">Same size · float or sink</div>
+        <div class="view" data-scene="buoy" tabindex="0" aria-label="Buoyancy tank viewport"></div>
+      </div>
+    </section>
+
     <section class="teachers" id="teachers">
       <div>
         <h2>For <em>teachers</em></h2>
@@ -1252,20 +1323,21 @@
             <li>Describe surface tension as the pull in a liquid's skin, and contrast a beaded drop with one that wets out.</li>
             <li>Show that a soft body changes shape under a force, stays one connected piece, and keeps about the same amount of material.</li>
                       <li>Name the medium as the stuff a wave moves through, and show that a particle stays near its home while the disturbance travels.</li>
+                        <li>Name buoyancy as the upward push from the fluid, and show that same-size blocks float or sink by density.</li>
             </ul>
         </div>
         <div class="teach-card">
           <h3>10-minute classroom activity</h3>
-          <p>1) Specimen 01: pick one float. Does it cross the tank? 2) Drop a stone and sketch the ring. 3) Specimen 02: drag once and name what the neighbors do. 4) Specimen 03: follow one ink drop. Write one sentence on how flow differs from the wave. 5) Specimen 05: choose Bead, poke the drop, and watch the skin pull it round. Switch to Wet out. Sketch both shapes. Name surface tension as that pull. 6) Specimen 06: poke the jelly and hold. Point to a colored bit and to a side that swelled. The bit stayed in the body. Let go, then drop the block. Sketch the squash and the climb back. Name stiffness as the pull back, and damping as what quiets the wobble. 7) Specimen 07: pick one colored bead. Send a single pulse. Does the bead cross the tray, or only rise and fall? Say how that differs from the ink.</p>
+          <p>1) Specimen 01: pick one float. Does it cross the tank? 2) Drop a stone and sketch the ring. 3) Specimen 02: drag once and name what the neighbors do. 4) Specimen 03: follow one ink drop. Write one sentence on how flow differs from the wave. 5) Specimen 05: choose Bead, poke the drop, and watch the skin pull it round. Switch to Wet out. Sketch both shapes. Name surface tension as that pull. 6) Specimen 06: poke the jelly and hold. Point to a colored bit and to a side that swelled. The bit stayed in the body. Let go, then drop the block. Sketch the squash and the climb back. Name stiffness as the pull back, and damping as what quiets the wobble. 7) Specimen 07: pick one colored bead. Send a single pulse. Does the bead cross the tray, or only rise and fall? Say how that differs from the ink. 8) Specimen 08: press Drop. Say which block floats and which sinks. Switch Water to Oil. Name what changed.</p>
         </div>
         <div class="map-cols">
           <div class="teach-card">
             <h3>Shop &amp; continuum map</h3>
-            <p>Ripple tanks, flags and shade cloth, wind on a loose cover, ink in a flume, a bead of water on wax paper, the same water wetting clean glass, and a block of gelatin or a foam pad you can push without tearing apart. A tray of beads, or a line of people doing the wave, shows the medium. Useful before anyone says “partial differential equation.”</p>
+            <p>Ripple tanks, flags and shade cloth, wind on a loose cover, ink in a flume, a bead of water on wax paper, the same water wetting clean glass, and a block of gelatin or a foam pad you can push without tearing apart. A tray of beads, or a line of people doing the wave, shows the medium. A wood block and a metal block in one tank: the fluid pushes up, and density decides float or sink. Useful before anyone says “partial differential equation.”</p>
           </div>
           <div class="teach-card">
             <h3>Intro physics map</h3>
-            <p>Transverse waves, wavelength and tempo, damping, tension in a membrane, advection versus wave motion, surface tension — bead versus wet-out — and a soft body whose shape changes while its volume stays about the same. The medium is the stuff a wave moves through.</p>
+            <p>Transverse waves, wavelength and tempo, damping, tension in a membrane, advection versus wave motion, surface tension — bead versus wet-out — and a soft body whose shape changes while its volume stays about the same. The medium is the stuff a wave moves through. Buoyancy and density — float versus sink.</p>
           </div>
         </div>
       </div>
