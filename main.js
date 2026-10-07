@@ -3268,6 +3268,610 @@ class DiffusionDish {
     }
   }
 }
+/* ——— Non-Newtonian: oobleck firms up when the push is fast ——— */
+
+class OobleckTray {
+  constructor(cols, rows) {
+    this.cols = cols;
+    this.rows = rows;
+    this.width = 2.28;
+    this.depth = 1.42;
+    this.restY = 0.3;
+    this.ballR = 0.088;
+    this.rate = 0.2;
+    this.kind = 'demo';
+    this.elapsed = 0;
+    this.demoT = 0;
+    this.userRun = false;
+    this.posed = false;
+    this.probe = { x: -0.5, y: 0.95, z: 0.02, visible: true };
+    this.ball = { x: 0.78, y: 0.9, z: 0.14, visible: false };
+    this.ballSpin = 0;
+    this.pointer = { down: false, x: 0, z: 0, x0: 0, z0: 0, speed: 0, age: 0, t0: 0 };
+    this.strikeX = 0;
+    this.strikeZ = 0;
+    this.slowX = 0;
+    this.slowZ = 0.02;
+    this.releaseY = 0.7;
+    this.cBase = new THREE.Color(0xf1e2c4);
+    this.cDeep = new THREE.Color(0xb89258);
+    this.cHigh = new THREE.Color(0xfff6e2);
+    this.tmp = new THREE.Color();
+  }
+
+  ease(t) {
+    const x = Math.min(1, Math.max(0, t));
+    return x * x * (3 - 2 * x);
+  }
+
+  setRate(v) {
+    this.rate = Math.min(1, Math.max(0, v));
+  }
+
+  startDemo() {
+    this.kind = 'demo';
+    this.demoT = 0;
+    this.userRun = false;
+    this.posed = false;
+    this.pointer.down = false;
+    this.ball.visible = false;
+    this.probe.visible = true;
+  }
+
+  playSlow() {
+    this.userRun = true;
+    this.posed = false;
+    this.kind = 'slow';
+    this.elapsed = 0;
+    this.slowX = 0;
+    this.slowZ = 0.02;
+    this.pointer.down = false;
+  }
+
+  playHardAt(x, z) {
+    this.userRun = true;
+    this.posed = false;
+    this.kind = 'hard';
+    this.elapsed = 0;
+    this.strikeX = x;
+    this.strikeZ = z;
+    this.pointer.down = false;
+  }
+
+  playHard() {
+    this.playHardAt(0, 0.02);
+  }
+
+  playFall() {
+    this.userRun = true;
+    this.posed = false;
+    this.kind = 'fall';
+    this.elapsed = 0;
+    this.pointer.down = false;
+  }
+
+  playDrop() {
+    this.userRun = true;
+    this.posed = false;
+    this.kind = 'drop';
+    this.elapsed = 0;
+    this.pointer.down = false;
+    this.ball.x = -0.22;
+    this.ballSpin = 0;
+  }
+
+  playRated(v) {
+    this.setRate(v);
+    this.userRun = true;
+    this.posed = false;
+    this.kind = 'rated';
+    this.elapsed = 0;
+    this.pointer.down = false;
+  }
+
+  poseStill() {
+    this.kind = 'pose';
+    this.posed = true;
+    this.userRun = false;
+    this.pointer.down = false;
+    this.h.fill(0);
+    this.stamp(-0.5, 0.0, -0.17, 0.36, 0.014);
+    this.probe.x = -0.5;
+    this.probe.z = 0;
+    this.probe.y = this.restY - 0.17 + 0.045;
+    this.probe.visible = true;
+    this.stamp(0.42, -0.06, -0.05, 0.11, 0.032);
+    this.ball.x = 0.78;
+    this.ball.z = 0.16;
+    this.ball.y = this.restY + this.ballR * 0.96;
+    this.ball.visible = true;
+    this.ballSpin = 0.4;
+  }
+
+  pointerDown(x, z) {
+    this.userRun = true;
+    this.posed = false;
+    this.kind = 'pointer';
+    this.elapsed = 0;
+    this.h.fill(0);
+    this.ball.visible = false;
+    this.probe.visible = true;
+    this.probe.x = x;
+    this.probe.z = z;
+    this.probe.y = 0.78;
+    this.pointer.down = true;
+    this.pointer.x = x;
+    this.pointer.z = z;
+    this.pointer.x0 = x;
+    this.pointer.z0 = z;
+    this.pointer.speed = 0;
+    this.pointer.age = 0;
+    this.pointer.t0 = performance.now();
+  }
+
+  pointerMove(x, z, dt) {
+    const h = Math.max(dt, 0.016);
+    const speed = Math.hypot(x - this.pointer.x, z - this.pointer.z) / h;
+    this.pointer.speed = this.pointer.speed * 0.55 + speed * 0.45;
+    this.pointer.x = x;
+    this.pointer.z = z;
+  }
+
+  pointerUp() {
+    if (!this.pointer.down) return;
+    this.pointer.down = false;
+    const travel = Math.hypot(this.pointer.x - this.pointer.x0, this.pointer.z - this.pointer.z0);
+    const age = (performance.now() - this.pointer.t0) / 1000;
+    this.pointer.age = age;
+    if (age < 0.24 && travel < 0.12) {
+      this.playHardAt(this.pointer.x, this.pointer.z);
+      return;
+    }
+    this.kind = 'release';
+    this.elapsed = 0;
+    this.releaseY = this.probe.y;
+  }
+
+  stamp(cx, cz, depth, radius, ridge) {
+    const r = Math.max(radius, 0.04);
+    const inv = 1 / (2 * r * r);
+    const ringR = r * 1.35;
+    const ringW = r * 0.42;
+    const ringInv = 1 / (2 * ringW * ringW);
+    const hx = this.width * 0.5;
+    const hz = this.depth * 0.5;
+    for (let i = 0; i < this.count; i++) {
+      const x = this.baseX[i];
+      const z = this.baseZ[i];
+      const edge = Math.max(Math.abs(x) / hx, Math.abs(z) / hz);
+      let fade = 1;
+      if (edge > 0.86) fade = Math.max(0, (0.98 - edge) / 0.12);
+      if (fade <= 0) continue;
+      const dx = x - cx;
+      const dz = z - cz;
+      const d2 = dx * dx + dz * dz;
+      const g = Math.exp(-d2 * inv);
+      const dent = depth * g * fade;
+      if (dent < this.h[i]) this.h[i] = dent;
+      if (ridge > 0) {
+        const d = Math.sqrt(d2);
+        const ring = Math.exp(-(d - ringR) * (d - ringR) * ringInv);
+        if (ring > 0.22) {
+          const bump = ridge * ring * (1 - g) * fade;
+          if (bump > this.h[i]) this.h[i] = bump;
+        }
+      }
+      if (this.h[i] < -0.2) this.h[i] = -0.2;
+      if (this.h[i] > 0.045) this.h[i] = 0.045;
+    }
+  }
+
+  step(dt) {
+    const h = Math.min(Math.max(dt, 0), 0.05);
+    if (this.kind === 'pose' || this.kind === 'hold') return;
+    if (this.kind === 'demo') this.stepDemo(h);
+    else if (this.kind === 'slow') this.stepSlow(h);
+    else if (this.kind === 'hard') this.stepHard(h);
+    else if (this.kind === 'fall') this.stepFall(h);
+    else if (this.kind === 'drop') this.stepDrop(h);
+    else if (this.kind === 'rated') this.stepRated(h);
+    else if (this.kind === 'pointer') this.stepPointer(h);
+    else if (this.kind === 'release') this.stepRelease(h);
+  }
+
+  stepDemo(dt) {
+    this.demoT += dt;
+    const cycle = 9;
+    if (this.demoT >= cycle) this.demoT = 0;
+    const u = this.demoT;
+    this.h.fill(0);
+    this.ball.visible = false;
+    this.probe.visible = true;
+    const slowX = -0.5;
+    const slowZ = 0.02;
+    const hardX = 0.46;
+    const hardZ = -0.04;
+    if (u >= 0.7 && u < 8.3) {
+      const grow = this.ease(Math.min(1, (u - 0.7) / 1.45));
+      const fade = u > 7.6 ? Math.max(0, 1 - (u - 7.6) / 0.7) : 1;
+      const a = grow * fade;
+      this.stamp(slowX, slowZ, -0.17 * a, 0.14 + 0.22 * grow, 0.014 * a);
+    }
+    if (u < 0.7) {
+      const t = u / 0.7;
+      this.probe.x = slowX;
+      this.probe.z = slowZ;
+      this.probe.y = 1.0 - t * 0.66;
+    } else if (u < 2.2) {
+      const e = this.ease((u - 0.7) / 1.5);
+      this.probe.x = slowX;
+      this.probe.z = slowZ;
+      this.probe.y = 0.34 + (this.restY - 0.17 + 0.045 - 0.34) * e;
+    } else if (u < 3.05) {
+      this.probe.x = slowX;
+      this.probe.z = slowZ;
+      this.probe.y = this.restY - 0.17 + 0.045;
+    } else if (u < 4.0) {
+      const e = this.ease((u - 3.05) / 0.95);
+      this.probe.x = slowX + (hardX - slowX) * e;
+      this.probe.z = slowZ + (hardZ - slowZ) * e;
+      this.probe.y = (this.restY - 0.125) + e * 0.72;
+    } else if (u < 4.55) {
+      this.probe.x = hardX;
+      this.probe.z = hardZ;
+      this.probe.y = 0.9;
+    } else if (u < 4.72) {
+      const t = (u - 4.55) / 0.17;
+      this.probe.x = hardX;
+      this.probe.z = hardZ;
+      this.probe.y = 0.9 - t * 0.56;
+    } else if (u < 5.35) {
+      const t = this.ease((u - 4.72) / 0.63);
+      this.probe.x = hardX;
+      this.probe.z = hardZ;
+      this.probe.y = 0.34 + t * 0.44;
+      this.stamp(hardX, hardZ, -0.05, 0.11, 0.032);
+    } else if (u < 7.6) {
+      this.probe.x = hardX;
+      this.probe.z = hardZ;
+      this.probe.y = 0.78;
+      this.stamp(hardX, hardZ, -0.05, 0.11, 0.032);
+    } else {
+      const t = Math.min(1, (u - 7.6) / 0.7);
+      this.probe.x = hardX + (slowX - hardX) * t;
+      this.probe.z = hardZ + (slowZ - hardZ) * t;
+      this.probe.y = 0.78 + t * 0.22;
+      this.stamp(hardX, hardZ, -0.05 * (1 - t), 0.11, 0.032 * (1 - t));
+    }
+  }
+
+  stepSlow(dt) {
+    this.elapsed += dt;
+    const u = this.elapsed;
+    const x = this.slowX;
+    const z = this.slowZ;
+    this.ball.visible = false;
+    this.probe.visible = true;
+    this.probe.x = x;
+    this.probe.z = z;
+    this.h.fill(0);
+    const depth = -0.17;
+    if (u < 0.65) {
+      this.probe.y = 0.98 - (u / 0.65) * 0.64;
+    } else if (u < 2.2) {
+      const e = this.ease((u - 0.65) / 1.55);
+      this.stamp(x, z, depth * e, 0.14 + 0.24 * e, 0.014 * e);
+      this.probe.y = 0.34 + (this.restY + depth + 0.045 - 0.34) * e;
+    } else {
+      this.stamp(x, z, depth, 0.38, 0.014);
+      this.probe.y = this.restY + depth + 0.045;
+      this.kind = 'hold';
+    }
+  }
+
+  stepHard(dt) {
+    this.elapsed += dt;
+    const u = this.elapsed;
+    const x = this.strikeX;
+    const z = this.strikeZ;
+    this.ball.visible = false;
+    this.probe.visible = true;
+    this.probe.x = x;
+    this.probe.z = z;
+    this.h.fill(0);
+    if (u < 0.16) {
+      this.probe.y = 0.92 - (u / 0.16) * 0.58;
+    } else if (u < 0.36) {
+      const t = (u - 0.16) / 0.2;
+      this.stamp(x, z, -0.05, 0.11, 0.03);
+      this.probe.y = 0.34 + t * 0.12;
+    } else if (u < 1.2) {
+      const t = this.ease((u - 0.36) / 0.84);
+      this.stamp(x, z, -0.05, 0.11, 0.032);
+      this.probe.y = 0.46 + t * 0.32;
+    } else {
+      this.stamp(x, z, -0.05, 0.11, 0.032);
+      this.probe.y = 0.78;
+      this.kind = 'hold';
+    }
+  }
+
+  stepFall(dt) {
+    this.elapsed += dt;
+    const u = this.elapsed;
+    this.probe.visible = false;
+    this.ball.visible = true;
+    this.h.fill(0);
+    const x = 0.02;
+    const z = 0.02;
+    this.ball.x = x;
+    this.ball.z = z;
+    const startY = 0.98;
+    const sunkY = this.restY - 0.07;
+    const dur = 2.5;
+    if (u < dur) {
+      const e = this.ease(u / dur);
+      const y = startY + (sunkY - startY) * e;
+      this.ball.y = y;
+      const contact = this.restY + this.ballR;
+      if (y < contact) {
+        const pen = (contact - y) / (contact - sunkY);
+        this.stamp(x, z, -0.16 * pen, 0.16 + 0.2 * pen, 0.01 * pen);
+      }
+    } else {
+      this.ball.y = sunkY;
+      this.stamp(x, z, -0.16, 0.38, 0.012);
+      this.kind = 'hold';
+    }
+  }
+
+  stepDrop(dt) {
+    this.elapsed += dt;
+    const u = this.elapsed;
+    this.probe.visible = false;
+    this.ball.visible = true;
+    this.h.fill(0);
+    const landY = this.restY + this.ballR * 0.96;
+    if (u < 0.26) {
+      const t = u / 0.26;
+      this.ball.x = -0.22;
+      this.ball.z = 0.04;
+      this.ball.y = 1.08 + (landY - 1.08) * (t * t);
+    } else if (u < 0.42) {
+      const t = (u - 0.26) / 0.16;
+      this.ball.x = -0.22;
+      this.ball.z = 0.04;
+      this.ball.y = landY + Math.sin(t * Math.PI) * 0.055;
+      this.stamp(this.ball.x, this.ball.z, -0.02, 0.09, 0.012);
+    } else if (u < 1.25) {
+      const t = (u - 0.42) / 0.83;
+      const e = t * (2 - t);
+      this.ball.x = -0.22 + e * 0.62;
+      this.ball.z = 0.04;
+      this.ball.y = landY;
+      this.stamp(this.ball.x, this.ball.z, -0.016, 0.075, 0);
+    } else {
+      this.ball.y = landY;
+      this.stamp(this.ball.x, this.ball.z, -0.016, 0.075, 0);
+      this.kind = 'hold';
+    }
+    this.ballSpin = this.ball.x / this.ballR;
+  }
+
+  stepRated(dt) {
+    this.elapsed += dt;
+    const rate = this.rate;
+    const u = this.elapsed;
+    const x = 0;
+    const z = 0.02;
+    this.ball.visible = false;
+    this.probe.visible = true;
+    this.probe.x = x;
+    this.probe.z = z;
+    this.h.fill(0);
+    const depth = -0.17 * (1 - rate) - 0.05 * rate;
+    const radius = 0.38 * (1 - rate) + 0.11 * rate;
+    const ridge = 0.012 * (1 - rate) + 0.032 * rate;
+    const attack = 0.18 + (1 - rate) * 1.5;
+    const sunkY = this.restY + depth + 0.045;
+    const skimY = this.restY + 0.02;
+    if (u < attack) {
+      const e = rate > 0.62 ? Math.min(1, u / attack) : this.ease(u / attack);
+      this.stamp(x, z, depth * e, 0.1 + (radius - 0.1) * e, ridge * e);
+      const endY = rate > 0.55 ? skimY : sunkY;
+      this.probe.y = 0.96 + (endY - 0.96) * e;
+    } else if (rate > 0.55 && u < attack + 0.7) {
+      const t = this.ease((u - attack) / 0.7);
+      this.stamp(x, z, depth, radius, ridge);
+      this.probe.y = skimY + t * 0.46;
+    } else {
+      this.stamp(x, z, depth, radius, ridge);
+      this.probe.y = rate > 0.55 ? 0.78 : sunkY;
+      this.kind = 'hold';
+    }
+  }
+
+  stepPointer(dt) {
+    if (!this.pointer.down) return;
+    this.pointer.age += dt;
+    const fast = this.pointer.speed > 1.15;
+    this.probe.x += (this.pointer.x - this.probe.x) * Math.min(1, 14 * dt);
+    this.probe.z += (this.pointer.z - this.probe.z) * Math.min(1, 14 * dt);
+    if (fast) {
+      const skim = this.restY + 0.04;
+      this.probe.y += (skim - this.probe.y) * Math.min(1, 18 * dt);
+      if (this.probe.y < this.restY + 0.08) this.stamp(this.probe.x, this.probe.z, -0.038, 0.1, 0.022);
+    } else {
+      const sinkTarget = this.restY - 0.15;
+      this.probe.y += (sinkTarget - this.probe.y) * Math.min(1, 2.6 * dt);
+      if (this.probe.y < this.restY + 0.02) {
+        const sunk = Math.min(1, (this.restY + 0.02 - this.probe.y) / 0.17);
+        const e = this.ease(sunk);
+        this.stamp(this.probe.x, this.probe.z, -0.16 * Math.max(e, 0.25), 0.18 + 0.16 * e, 0.01 * e);
+      }
+    }
+  }
+
+  stepRelease(dt) {
+    this.elapsed += dt;
+    const t = Math.min(1, this.elapsed / 0.7);
+    this.probe.y = this.releaseY + t * (0.82 - this.releaseY);
+    if (t >= 1) this.kind = 'hold';
+  }
+
+  mount(scene) {
+    this.buildSurface();
+    scene.add(this.mesh);
+
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(3.2, 48),
+      new THREE.MeshStandardMaterial({ color: 0x14120f, roughness: 0.96, metalness: 0.02, envMapIntensity: 0.25 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.22;
+    scene.add(ground);
+
+    const plinth = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.55, 1.62, 0.14, 40),
+      new THREE.MeshStandardMaterial({ color: 0x6d4b32, roughness: 0.72, metalness: 0.04 })
+    );
+    plinth.position.y = -0.04;
+    scene.add(plinth);
+
+    const floor = new THREE.Mesh(
+      new THREE.BoxGeometry(this.width + 0.18, 0.07, this.depth + 0.18),
+      new THREE.MeshStandardMaterial({ color: 0x1c1915, roughness: 0.9, metalness: 0.06 })
+    );
+    floor.position.y = 0.065;
+    scene.add(floor);
+
+    const rimMat = new THREE.MeshStandardMaterial({
+      color: 0x8d97a3,
+      roughness: 0.32,
+      metalness: 0.78,
+      envMapIntensity: 1.05,
+    });
+    const lipMat = new THREE.MeshStandardMaterial({
+      color: 0xc6a15a,
+      roughness: 0.38,
+      metalness: 0.62,
+      envMapIntensity: 0.8,
+    });
+    const rimH = 0.3;
+    const rimY = 0.065 + rimH / 2;
+    const hw = this.width / 2 + 0.09;
+    const hd = this.depth / 2 + 0.09;
+    const t = 0.055;
+    const walls = [
+      [this.width + 0.24, rimH, t, 0, rimY, hd],
+      [this.width + 0.24, rimH, t, 0, rimY, -hd],
+      [t, rimH, this.depth + 0.18, hw, rimY, 0],
+      [t, rimH, this.depth + 0.18, -hw, rimY, 0],
+    ];
+    for (const [w, h, d, x, y, z] of walls) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), rimMat);
+      wall.position.set(x, y, z);
+      scene.add(wall);
+    }
+    const lipH = 0.018;
+    const lipY = 0.065 + rimH + lipH / 2;
+    const lips = [
+      [this.width + 0.28, lipH, 0.07, 0, lipY, hd],
+      [this.width + 0.28, lipH, 0.07, 0, lipY, -hd],
+      [0.07, lipH, this.depth + 0.22, hw, lipY, 0],
+      [0.07, lipH, this.depth + 0.22, -hw, lipY, 0],
+    ];
+    for (const [w, h, d, x, y, z] of lips) {
+      const lip = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lipMat);
+      lip.position.set(x, y, z);
+      scene.add(lip);
+    }
+
+    const wood = new THREE.MeshStandardMaterial({ color: 0x5c3a22, roughness: 0.62, metalness: 0.04 });
+    const tipMat = new THREE.MeshStandardMaterial({ color: 0x6e4a2c, roughness: 0.48, metalness: 0.05 });
+    this.probeGroup = new THREE.Group();
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 22, 16), tipMat);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.052, 0.64, 18), wood);
+    shaft.position.y = 0.36;
+    this.probeGroup.add(tip, shaft);
+    scene.add(this.probeGroup);
+
+    const ballMat = new THREE.MeshStandardMaterial({
+      color: 0x1a2740,
+      roughness: 0.36,
+      metalness: 0.14,
+      envMapIntensity: 0.85,
+    });
+    this.ballMesh = new THREE.Mesh(new THREE.SphereGeometry(this.ballR, 28, 20), ballMat);
+    const mark = new THREE.Mesh(
+      new THREE.SphereGeometry(0.026, 10, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0xff9d2c,
+        emissive: 0xff9d2c,
+        emissiveIntensity: 0.4,
+        roughness: 0.4,
+      })
+    );
+    mark.position.set(0.055, 0.04, 0.028);
+    this.ballMesh.add(mark);
+    scene.add(this.ballMesh);
+
+    this.sync();
+    return this;
+  }
+
+  buildSurface() {
+    const geo = new THREE.PlaneGeometry(this.width, this.depth, this.cols - 1, this.rows - 1);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position;
+    this.count = pos.count;
+    this.baseX = new Float32Array(this.count);
+    this.baseZ = new Float32Array(this.count);
+    this.h = new Float32Array(this.count);
+    this.mottle = new Float32Array(this.count);
+    for (let i = 0; i < this.count; i++) {
+      this.baseX[i] = pos.getX(i);
+      this.baseZ[i] = pos.getZ(i);
+      const n = Math.sin(i * 12.9898) * 43758.5453;
+      this.mottle[i] = n - Math.floor(n);
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(this.count * 3), 3));
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.78,
+      metalness: 0.02,
+      envMapIntensity: 0.32,
+      side: THREE.DoubleSide,
+    });
+    this.geo = geo;
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 2;
+  }
+
+  sync() {
+    const pos = this.geo.attributes.position;
+    const col = this.geo.attributes.color;
+    for (let i = 0; i < this.count; i++) {
+      const y = this.restY + this.h[i];
+      pos.setY(i, y);
+      const depthT = Math.min(1, Math.max(0, -this.h[i] / 0.17));
+      const liftT = Math.min(1, Math.max(0, this.h[i] / 0.03));
+      this.tmp.copy(this.cBase).lerp(this.cDeep, depthT * 0.9);
+      if (liftT > 0) this.tmp.lerp(this.cHigh, liftT);
+      const m = 0.94 + 0.06 * this.mottle[i];
+      col.setXYZ(i, this.tmp.r * m, this.tmp.g * m, this.tmp.b * m);
+    }
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
+    this.geo.computeVertexNormals();
+    this.probeGroup.visible = this.probe.visible;
+    this.probeGroup.position.set(this.probe.x, this.probe.y, this.probe.z);
+    this.ballMesh.visible = this.ball.visible;
+    this.ballMesh.position.set(this.ball.x, this.ball.y, this.ball.z);
+    this.ballMesh.rotation.z = -this.ballSpin;
+  }
+}
 /* ——— Build specimens ——— */
 
 const waveCols = narrowAtStart ? 40 : 68;
@@ -3773,6 +4377,48 @@ const diffPoint = new THREE.PointLight(0xffd2a4, 11, 18, 2);
 diffPoint.position.set(1.15, 2.7, 2.15);
 diffScene.add(diffPoint);
 diffusion.mount(diffScene);
+const ooze = new OobleckTray(narrowAtStart ? 36 : 52, narrowAtStart ? 24 : 34);
+const oozeScene = makeScene(document.querySelector('[data-scene="ooze"]'), {
+  bg: 0x101418,
+  px: 0.2,
+  py: 1.62,
+  pz: 1.95,
+  tx: -0.05,
+  ty: 0.22,
+  tz: 0,
+  fov: 32,
+  minDist: 1.4,
+  maxDist: 6.4,
+});
+oozeScene.userData.controls.enabled = false;
+oozeScene.userData.controls.minPolarAngle = 0.35;
+oozeScene.userData.controls.maxPolarAngle = 1.15;
+let oozeStacked = null;
+function frameOoze() {
+  const stacked = window.innerWidth <= 860;
+  if (stacked === oozeStacked) return;
+  oozeStacked = stacked;
+  const controls = oozeScene.userData.controls;
+  const cam = oozeScene.userData.camera;
+  if (stacked) {
+    controls.target.set(0, 0.2, 0);
+    cam.position.set(0.06, 1.95, 1.42);
+    cam.fov = 36;
+  } else {
+    controls.target.set(-0.08, 0.24, -0.02);
+    cam.position.set(0.22, 1.48, 1.92);
+    cam.fov = 32;
+  }
+  cam.updateProjectionMatrix();
+  controls.update();
+}
+frameOoze();
+window.addEventListener('resize', frameOoze);
+oozeScene.add(new THREE.HemisphereLight(0xc5daf5, 0x3a2416, 1.35));
+const oozePoint = new THREE.PointLight(0xffd2a4, 26, 16, 2);
+oozePoint.position.set(0.7, 2.6, 1.55);
+oozeScene.add(oozePoint);
+ooze.mount(oozeScene);
 /* ——— UI state ——— */
 
 const ui = {
@@ -3803,6 +4449,7 @@ const ui = {
   viscMu: 14,
   capWidth: 2.2,
   diffSpread: 1,
+  oozeRate: 0.2,
   drive: true,
 };
 
@@ -3988,6 +4635,93 @@ document.getElementById('diff-drop').addEventListener('click', () => {
 if (!motionOK()) {
   diffusion.poseStill();
   diffusion.sync();
+}
+let oozeArmed = false;
+bindRange('ooze-rate', (v) => v.toFixed(2), (v) => {
+  ui.oozeRate = v;
+  ooze.setRate(v);
+  if (oozeArmed) {
+    ooze.playRated(v);
+    syncOozeChips();
+  }
+});
+oozeArmed = true;
+
+function syncOozeChips() {
+  document.querySelectorAll('[data-ooze]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.ooze === ooze.kind));
+  });
+}
+
+document.querySelectorAll('[data-ooze]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const kind = btn.dataset.ooze;
+    const slider = document.getElementById('ooze-rate');
+    const out = document.getElementById('ooze-rate-out');
+    if (kind === 'slow') {
+      slider.value = '0.16';
+      ui.oozeRate = 0.16;
+      out.textContent = '0.16';
+      ooze.setRate(0.16);
+      ooze.playSlow();
+    } else if (kind === 'hard') {
+      slider.value = '0.92';
+      ui.oozeRate = 0.92;
+      out.textContent = '0.92';
+      ooze.setRate(0.92);
+      ooze.playHard();
+    } else if (kind === 'fall') {
+      ooze.playFall();
+    } else {
+      ooze.playDrop();
+    }
+    syncOozeChips();
+  });
+});
+
+const oozeEl = document.querySelector('[data-scene="ooze"]');
+const oozePlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -ooze.restY);
+const oozeHit = new THREE.Vector3();
+function oozePointFromEvent(e) {
+  ndcFromEvent(e, oozeEl);
+  raycaster.setFromCamera(ndc, oozeScene.userData.camera);
+  const hits = raycaster.intersectObject(ooze.mesh, false);
+  if (hits.length) return hits[0].point;
+  if (raycaster.ray.intersectPlane(oozePlane, oozeHit)) return oozeHit;
+  return null;
+}
+let oozePointerT = 0;
+oozeEl.addEventListener('pointerdown', (e) => {
+  const p = oozePointFromEvent(e);
+  if (!p) return;
+  if (Math.abs(p.x) > ooze.width * 0.46 || Math.abs(p.z) > ooze.depth * 0.46) return;
+  ooze.pointerDown(p.x, p.z);
+  oozePointerT = performance.now();
+  oozeEl.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+oozeEl.addEventListener('pointermove', (e) => {
+  if (!ooze.pointer.down) return;
+  const p = oozePointFromEvent(e);
+  if (!p) return;
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - oozePointerT) / 1000);
+  oozePointerT = now;
+  const x = Math.max(-ooze.width * 0.42, Math.min(ooze.width * 0.42, p.x));
+  const z = Math.max(-ooze.depth * 0.42, Math.min(ooze.depth * 0.42, p.z));
+  ooze.pointerMove(x, z, dt);
+});
+function endOozePointer() {
+  ooze.pointerUp();
+}
+oozeEl.addEventListener('pointerup', endOozePointer);
+oozeEl.addEventListener('pointercancel', endOozePointer);
+
+if (!motionOK()) {
+  ooze.poseStill();
+  ooze.sync();
+} else {
+  ooze.startDemo();
 }
 
 function syncDropShapeChips() {
@@ -4432,6 +5166,18 @@ diffScene.userData.update = (t, dt) => {
   }
   diffusion.sync();
 };
+oozeScene.userData.update = (t, dt) => {
+  const motion = motionOK();
+  if (!motion && !ooze.userRun) {
+    if (!ooze.posed) ooze.poseStill();
+  } else if (motion && ooze.kind === 'pose' && !ooze.userRun) {
+    ooze.startDemo();
+    ooze.step(dt);
+  } else {
+    ooze.step(dt);
+  }
+  ooze.sync();
+};
 dropScene.userData.update = (t, dt) => {
   const motion = motionOK();
   if (motion && drop.grab < 0) {
@@ -4559,6 +5305,7 @@ window.__SML = {
   visc,
   cap,
   diffusion,
+  ooze,
   ui,
   get frameCount() { return frameCount; },
   get reducedMotion() { return reducedMotion; },

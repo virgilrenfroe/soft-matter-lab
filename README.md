@@ -28,6 +28,8 @@ Railway is the live host. `Dockerfile`, `Caddyfile`, and `railway.toml` are read
 
 **11. Diffusion** — a drop of dye in a shallow still dish. The color spreads from a crowded spot into empty water. Nothing carries it. Warm water lets the dye wander faster. Cool water lets it wander more slowly. With reduced motion or `?still=1`, the dish opens on a dye cloud that has already spread, and holds still. Press Drop dye and that one spread still runs.
 
+**12. Non-Newtonian** — a pale cornstarch-style mix in a shallow tray. A slow poke sinks and leaves a wide dimple. A hard poke meets a surface that holds. The same liquid. The rate of the push changes it. A ball lowered slowly sinks. The same ball, dropped fast, stays on top. With reduced motion or `?still=1`, the tray opens on a slow dimple beside a firm strike and holds still. Slow poke, Hard poke, and a press on the mix still run when someone asks.
+
 ## Local
 
 ```bash
