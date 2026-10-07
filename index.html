@@ -406,6 +406,41 @@
     .lesson { font-size: 14.5px; color: var(--ink); margin: 0; }
     .lesson p { margin: 0 0 0.5rem; }
     .lesson p:last-child { margin-bottom: 0; }
+    .definition {
+      margin: 0 0 0.75rem;
+      padding-bottom: 0.7rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+      font-size: 16px;
+      line-height: 1.45;
+      font-weight: 500;
+      color: var(--ink);
+    }
+    .world, .mistakes {
+      margin-top: 0.7rem;
+      padding-top: 0.6rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
+    }
+    .world strong, .mistakes strong {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--ice);
+      margin-bottom: 0.28rem;
+    }
+    .world p, .mistakes li {
+      margin: 0;
+      font-size: 13.5px;
+      line-height: 1.45;
+      color: var(--mute);
+    }
+    .mistakes ul {
+      margin: 0;
+      padding-left: 1.05rem;
+    }
+    .mistakes li + li { margin-top: 0.28rem; }
     .try { margin-top: 0.85rem; }
     .try strong {
       display: block;
@@ -640,7 +675,13 @@
       .hero-foot { grid-column: auto; flex-direction: column; align-items: flex-start; }
       .field-notes li:nth-child(even),
       .field-notes li:nth-child(3) { margin-left: 0; }
-      .specimen { display: block; min-height: 0; }
+      .specimen {
+        display: grid;
+        grid-template-columns: 1fr;
+        min-height: 0;
+      }
+      .specimen > .stage { grid-row: 1; grid-column: 1; }
+      .specimen > .placard { grid-row: 2; grid-column: 1; }
       .stage, .view-pane { min-height: 46vh; height: 46vh; }
       .centerpiece .stage {
         display: block;
@@ -744,22 +785,30 @@
     </header>
 
     <section class="specimen anchor-br" id="s01">
-      <div class="stage">
-        <p class="ghost-index ghost-tl" aria-hidden="true">01</p>
-        <div class="view-label">Crest travels · float stays</div>
-        <div class="view" data-scene="wave" tabindex="0" aria-label="Wave basin specimen viewport"></div>
-      </div>
       <aside class="placard">
         <div class="placard-stack">
           <p class="specimen-num">Specimen 01 — Wave basin</p>
           <h2 class="specimen-title">The crest travels. The water stays.</h2>
           <div class="sheet">
+            <p class="definition">A wave moves energy through a material. The crest runs from the paddle to the far wall, and the water under it only rises and falls.</p>
             <p class="notice">Note — energy crosses the tank. The colored floats do not.</p>
             <div class="lesson">
               <p>A traveling wave carries energy from the orange paddle to the far wall.</p>
               <p>The water under a crest mostly moves up and down.</p>
               <p>Each float is a bit of material on a fixed mast. A float near the paddle crests before a float downstream.</p>
               <p>A stone makes a ring. The ring spreads. The floats still stay on their masts.</p>
+            </div>
+            <div class="world">
+              <strong>In the world</strong>
+              <p>A luthier shapes a guitar or piano string so a wave can run along it while the string stays on the instrument. A structural engineer uses the same idea on a bridge: wind and traffic send a vibration along the deck, and the deck stays where it was built. Both jobs need a clear split between what travels and what stays, so a string rings clean and a bridge does not shake itself apart.</p>
+            </div>
+            <div class="mistakes">
+              <strong>Common mistakes</strong>
+              <ul>
+                <li>The water does not travel with the crest. It stays in place and bobs.</li>
+                <li>A float does not slide along the tank. It stays on its mast.</li>
+                <li>A ring that spreads is not water flowing outward. The ring moves. The floats stay.</li>
+              </ul>
             </div>
             <div class="try">
               <strong>Try this</strong>
@@ -787,25 +836,38 @@
           </div>
         </div>
       </aside>
+      <div class="stage">
+        <p class="ghost-index ghost-tl" aria-hidden="true">01</p>
+        <div class="view-label">Crest travels · float stays</div>
+        <div class="view" data-scene="wave" tabindex="0" aria-label="Wave basin specimen viewport"></div>
+      </div>
     </section>
 
     <section class="specimen anchor-bl" id="s02">
-      <div class="stage">
-        <p class="ghost-index ghost-tr" aria-hidden="true">02</p>
-        <div class="view-label">Neighbors share the pull</div>
-        <div class="view mode-pull" data-scene="cloth" tabindex="0" aria-label="Cloth specimen viewport"></div>
-      </div>
       <aside class="placard">
         <div class="placard-stack">
           <p class="specimen-num">Specimen 02 — Cloth</p>
           <h2 class="specimen-title">The sheet shares the tension.</h2>
           <div class="sheet">
+            <p class="definition">Tension is a pull shared across a cloth. Tug one stitch and the neighbors take the load, so the whole sheet curves together.</p>
             <p class="notice">Note — pull one stitch. The threads around it take the load.</p>
             <div class="lesson">
               <p>The cloth is a grid of points tied to their neighbors.</p>
               <p>A force at one point becomes a curve across the sheet. That shared pull is tension.</p>
               <p>The colored stitches are material. They stay in the weave. They move because the weave pulls them.</p>
               <p>Wind is a push spread over the whole cloth. The sheet bows together.</p>
+            </div>
+            <div class="world">
+              <strong>In the world</strong>
+              <p>A cloth-simulation artist in film and games sets this shared pull so a cape, a flag, or a dress moves as one sheet. A sailmaker cuts panels so the wind's push spreads across the whole sail. A parachute rigger checks the same thing on a canopy: the cloth has to open together and carry the load as one piece.</p>
+            </div>
+            <div class="mistakes">
+              <strong>Common mistakes</strong>
+              <ul>
+                <li>The stitch you pull is not the only one that moves. Neighbors share the tension.</li>
+                <li>Colored stitches do not slip out of the cloth. They stay in the weave.</li>
+                <li>Wind does not pick off one thread at a time. The whole sheet bows together.</li>
+              </ul>
             </div>
             <div class="try">
               <strong>Try this</strong>
@@ -834,25 +896,38 @@
           </div>
         </div>
       </aside>
+      <div class="stage">
+        <p class="ghost-index ghost-tr" aria-hidden="true">02</p>
+        <div class="view-label">Neighbors share the pull</div>
+        <div class="view mode-pull" data-scene="cloth" tabindex="0" aria-label="Cloth specimen viewport"></div>
+      </div>
     </section>
 
     <section class="specimen anchor-mr" id="s03">
-      <div class="stage">
-        <p class="ghost-index ghost-bl" aria-hidden="true">03</p>
-        <div class="view-label">Ink is carried</div>
-        <div class="view" data-scene="flow" tabindex="0" aria-label="Flow specimen viewport"></div>
-      </div>
       <aside class="placard">
         <div class="placard-stack">
           <p class="specimen-num">Specimen 03 — Flow</p>
           <h2 class="specimen-title">Here the material moves.</h2>
           <div class="sheet">
+            <p class="definition">Flow carries the material itself. The ink travels with the current, from one side of the tank to the other.</p>
             <p class="notice">Note — unlike the floats, each drop travels with the current.</p>
             <div class="lesson">
               <p>In the wave tank, the floats stayed on their masts.</p>
               <p>Here the ink is the material, and the current takes it downstream.</p>
               <p>The clay post splits the stream. Lanes go around and meet again.</p>
               <p>Slow the speed to zero and the ink stops. A wave crest would not.</p>
+            </div>
+            <div class="world">
+              <strong>In the world</strong>
+              <p>A meteorologist follows air that really travels, the way this ink travels with the current. Clouds, smoke, and rain ride that moving air around hills and through a city. A wind engineer uses the same idea in a tunnel, watching the air itself move past a car or a building.</p>
+            </div>
+            <div class="mistakes">
+              <strong>Common mistakes</strong>
+              <ul>
+                <li>Set the speed to zero and the ink stops. A wave crest would not.</li>
+                <li>The clay post does not end the stream. The ink goes around it and meets again.</li>
+                <li>Flow is not a wave. A wave moves energy while the material stays. Flow carries the material.</li>
+              </ul>
             </div>
             <div class="try">
               <strong>Try this</strong>
@@ -874,32 +949,39 @@
           </div>
         </div>
       </aside>
+      <div class="stage">
+        <p class="ghost-index ghost-bl" aria-hidden="true">03</p>
+        <div class="view-label">Ink is carried</div>
+        <div class="view" data-scene="flow" tabindex="0" aria-label="Flow specimen viewport"></div>
+      </div>
     </section>
 
     <section class="specimen centerpiece" id="s04">
-      <div class="stage">
-        <p class="ghost-index" aria-hidden="true">04</p>
-        <div class="view-pane">
-          <div class="view-label">Wave · material stays</div>
-          <div class="view" data-scene="compare-wave" tabindex="0" aria-label="Wave side of comparison"></div>
-        </div>
-        <div class="view-pane">
-          <div class="pane-tag">Cloth · tension shares</div>
-          <div class="view" data-scene="compare-cloth" tabindex="0" aria-label="Cloth side of comparison"></div>
-        </div>
-      </div>
       <aside class="placard">
         <div class="placard-stack">
           <div class="sheet">
             <div>
               <p class="specimen-num">Specimen 04 — Centerpiece</p>
               <h2 class="specimen-title">Same question. Two soft bodies.</h2>
+              <p class="definition">Soft matter changes shape and stays one piece. A crest can travel while the floats stay put, and a cloth can bend while its threads keep hold of one another.</p>
               <p class="notice">Note — left, the crest moves. Right, the load spreads.</p>
               <div class="lesson">
                 <p>Left: a crest runs the basin. The floats bob in place.</p>
                 <p>Right: wind loads the cloth. Neighbors share it.</p>
                 <p>Neither body is rigid. Both keep their material connected.</p>
                 <p>Soft matter is this: the shape changes, and the piece stays one piece.</p>
+              </div>
+              <div class="world">
+                <strong>In the world</strong>
+                <p>A piano technician hears a wave run down a string while the string stays in the piano. A sailmaker watches wind load a sail while neighboring cloth shares the pull. In both jobs the body is soft: the shape changes, and the piece stays one piece.</p>
+              </div>
+              <div class="mistakes">
+                <strong>Common mistakes</strong>
+                <ul>
+                  <li>On the left, the floats do not travel with the crest. They bob in place.</li>
+                  <li>On the right, the cloth is not a stiff board. It bends, and neighbors share the load.</li>
+                  <li>Soft does not mean the body comes apart. The shape changes, and the piece stays one piece.</li>
+                </ul>
               </div>
             </div>
             <div>
@@ -917,25 +999,44 @@
           </div>
         </div>
       </aside>
+      <div class="stage">
+        <p class="ghost-index" aria-hidden="true">04</p>
+        <div class="view-pane">
+          <div class="view-label">Wave · material stays</div>
+          <div class="view" data-scene="compare-wave" tabindex="0" aria-label="Wave side of comparison"></div>
+        </div>
+        <div class="view-pane">
+          <div class="pane-tag">Cloth · tension shares</div>
+          <div class="view" data-scene="compare-cloth" tabindex="0" aria-label="Cloth side of comparison"></div>
+        </div>
+      </div>
     </section>
 
     <section class="specimen anchor-bl" id="s05">
-      <div class="stage">
-        <p class="ghost-index ghost-tr" aria-hidden="true">05</p>
-        <div class="view-label">Skin pulls · bead or wet-out</div>
-        <div class="view mode-pull" data-scene="drop" tabindex="0" aria-label="Surface tension droplet viewport"></div>
-      </div>
       <aside class="placard">
         <div class="placard-stack">
           <p class="specimen-num">Specimen 05 — Surface tension</p>
           <h2 class="specimen-title">The skin pulls the drop.</h2>
           <div class="sheet">
+            <p class="definition">Surface tension is the inward pull in a liquid's skin. That pull holds a drop as a round bead, or lets the same liquid spread and wet the plate.</p>
             <p class="notice">Note — surface tension is the pull in a liquid's skin. That pull makes a bead, or lets the drop wet out.</p>
             <div class="lesson">
               <p>A liquid has a skin. The skin pulls inward.</p>
               <p>On a plate that sheds the liquid, the drop stays a tall bead. The foot stays small.</p>
               <p>On a plate the liquid likes, the same drop spreads and wets out. It gets short and wide. The amount of liquid does not change.</p>
               <p>The colored stitches sit on the skin. They ride the skin. They do not sink inside.</p>
+            </div>
+            <div class="world">
+              <strong>In the world</strong>
+              <p>An inkjet technician counts on a drop's skin to hold each drop as a bead in the air, then to let that ink wet the page. A coatings technician uses the same pull so paint lies flat on metal instead of beading into bare spots. You can see it outside too: rain stays a bead on a waxy leaf and wets out on clean glass.</p>
+            </div>
+            <div class="mistakes">
+              <strong>Common mistakes</strong>
+              <ul>
+                <li>Spreading flat does not use up liquid. The same drop gets short and wide.</li>
+                <li>The colored stitches are not inside the drop. They sit on the skin.</li>
+                <li>Bead and wet-out are not two different amounts. The skin and the plate set the shape.</li>
+              </ul>
             </div>
             <div class="try">
               <strong>Try this</strong>
@@ -962,6 +1063,11 @@
           </div>
         </div>
       </aside>
+      <div class="stage">
+        <p class="ghost-index ghost-tr" aria-hidden="true">05</p>
+        <div class="view-label">Skin pulls · bead or wet-out</div>
+        <div class="view mode-pull" data-scene="drop" tabindex="0" aria-label="Surface tension droplet viewport"></div>
+      </div>
     </section>
 
     <section class="teachers" id="teachers">
