@@ -3872,6 +3872,394 @@ class OobleckTray {
     this.ballMesh.rotation.z = -this.ballSpin;
   }
 }
+/* ——— Pressure: in a still liquid, deeper water pushes harder ——— */
+
+class PressureColumn {
+  constructor() {
+    this.W = 1.46;
+    this.D = 1.02;
+    this.H = 2.42;
+    this.panelX = 0.02;
+    this.probeX = -0.5;
+    this.faceZ = this.D / 2 + 0.034;
+    this.topFrac = 0.88;
+    this.span = 0.76;
+    this.levels = [
+      { name: 'shallow', frac: 0.78 },
+      { name: 'mid', frac: 0.5 },
+      { name: 'deep', frac: 0.18 },
+    ];
+    this.fill = 0.94;
+    this.depth = 0.5;
+    this.userRun = false;
+    this.posed = false;
+    this.demoT = 0;
+    this.cCool = new THREE.Color(0x1a3044);
+    this.cWarm = new THREE.Color(0xffb15a);
+    this.cArrowCool = new THREE.Color(0x8ec8ff);
+    this.cArrowHot = new THREE.Color(0xff9d2c);
+    this.cBrass = new THREE.Color(0xc6a15a);
+    this.tmp = new THREE.Color();
+    this.brass = new THREE.MeshStandardMaterial({
+      color: 0xc6a15a,
+      roughness: 0.38,
+      metalness: 0.62,
+      envMapIntensity: 0.8,
+    });
+    this.steel = new THREE.MeshStandardMaterial({
+      color: 0xd5dbe3,
+      roughness: 0.28,
+      metalness: 0.86,
+      envMapIntensity: 1.05,
+    });
+    this.frameMat = new THREE.MeshStandardMaterial({
+      color: 0x8d97a3,
+      roughness: 0.32,
+      metalness: 0.78,
+      envMapIntensity: 1.05,
+    });
+  }
+
+  ease(t) {
+    const x = Math.min(1, Math.max(0, t));
+    return x * x * (3 - 2 * x);
+  }
+
+  depthForFrac(frac) {
+    return (this.topFrac - frac) / this.span;
+  }
+
+  probeFrac() {
+    return this.topFrac - this.depth * this.span;
+  }
+
+  probeY() {
+    return this.probeFrac() * this.H;
+  }
+
+  surfaceY() {
+    return this.fill * this.H;
+  }
+
+  // Push is how far this point sits under the free surface. Same density everywhere.
+  pressureAt(y) {
+    const surface = this.surfaceY();
+    if (y >= surface - 0.001) return 0;
+    return (surface - y) / this.H;
+  }
+
+  levelFrac(name) {
+    const found = this.levels.find((level) => level.name === name);
+    return found ? found.frac : 0.5;
+  }
+
+  pushAt(name) {
+    return this.pressureAt(this.levelFrac(name) * this.H);
+  }
+
+  setDepth(v) {
+    this.depth = Math.min(1, Math.max(0, v));
+  }
+
+  setFill(v) {
+    this.fill = Math.min(1, Math.max(0.15, v));
+  }
+
+  setPreset(name) {
+    this.setDepth(this.depthForFrac(this.levelFrac(name)));
+    this.userRun = true;
+    this.posed = false;
+  }
+
+  startDemo() {
+    this.posed = false;
+    this.userRun = false;
+    this.demoT = 0;
+    this.fill = 0.94;
+    this.depth = this.depthForFrac(0.78);
+  }
+
+  poseStill() {
+    this.posed = true;
+    this.userRun = false;
+    this.fill = 0.94;
+    this.depth = this.depthForFrac(0.18);
+  }
+
+  step(dt) {
+    if (this.posed || this.userRun) return;
+    const h = Math.min(Math.max(dt, 0), 0.05);
+    this.demoT += h;
+    const cycle = 9.5;
+    if (this.demoT >= cycle) this.demoT = 0;
+    const u = this.demoT;
+    const shallowD = this.depthForFrac(0.78);
+    const deepD = this.depthForFrac(0.18);
+    if (u < 2.4) {
+      this.depth = shallowD + (deepD - shallowD) * this.ease(u / 2.4);
+    } else if (u < 4.6) {
+      this.depth = deepD;
+    } else if (u < 7.2) {
+      this.depth = deepD + (shallowD - deepD) * this.ease((u - 4.6) / 2.6);
+    } else {
+      this.depth = shallowD;
+    }
+  }
+
+  buildArrow(mat) {
+    const group = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 1, 12), mat);
+    shaft.position.y = 0.5;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.18, 14), mat);
+    head.position.y = 1.08;
+    group.add(shaft, head);
+    // Local +Y becomes world +Z: the arrow points out of the front wall.
+    group.rotation.x = Math.PI / 2;
+    return group;
+  }
+
+  buildPort(radius, segments) {
+    const group = new THREE.Group();
+    const geo = new THREE.CircleGeometry(radius, segments);
+    const pos = geo.attributes.position;
+    const base = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      base[i * 2] = pos.getX(i);
+      base[i * 2 + 1] = pos.getY(i);
+    }
+    const mat = new THREE.MeshStandardMaterial({
+      color: this.cCool.clone(),
+      emissive: this.cCool.clone(),
+      emissiveIntensity: 0.06,
+      roughness: 0.46,
+      metalness: 0.08,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    const plate = new THREE.Mesh(
+      new THREE.CircleGeometry(radius + 0.03, 28),
+      new THREE.MeshStandardMaterial({ color: 0x0e1218, roughness: 0.74, metalness: 0.16 })
+    );
+    plate.position.z = -0.014;
+    const ringMat = this.brass.clone();
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius + 0.012, 0.026, 8, 36), ringMat);
+    ring.position.z = 0.012;
+    const arrowMat = new THREE.MeshStandardMaterial({
+      color: this.cArrowCool.clone(),
+      emissive: this.cArrowCool.clone(),
+      emissiveIntensity: 0.35,
+      roughness: 0.32,
+      metalness: 0.14,
+    });
+    const arrow = this.buildArrow(arrowMat);
+    arrow.position.set(radius + 0.07, 0.0, 0.02);
+    group.add(plate, mesh, ring, arrow);
+    return { group, geo, base, radius, mat, ringMat, arrow, arrowMat };
+  }
+
+  stylePort(port, pressure) {
+    const p = Math.min(1.15, Math.max(0, pressure));
+    const bulge = p * 1.7 * port.radius;
+    const pos = port.geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = port.base[i * 2];
+      const y = port.base[i * 2 + 1];
+      const rn = Math.min(1, Math.hypot(x, y) / port.radius);
+      const dome = Math.pow(Math.max(0, 1 - rn * rn), 1.15);
+      pos.setZ(i, bulge * dome);
+    }
+    pos.needsUpdate = true;
+    port.geo.computeVertexNormals();
+    const hot = Math.min(1, p / 0.55);
+    port.mat.color.copy(this.cCool).lerp(this.cWarm, hot);
+    port.mat.emissive.copy(port.mat.color);
+    port.mat.emissiveIntensity = 0.05 + hot * 1.45;
+    port.ringMat.color.copy(this.cBrass).lerp(this.cWarm, hot * 0.82);
+    port.ringMat.emissive.copy(this.cWarm);
+    port.ringMat.emissiveIntensity = hot * 0.62;
+    const show = p > 0.03;
+    port.arrow.visible = show;
+    port.arrow.scale.set(1, show ? 0.1 + p * 0.92 : 0.001, 1);
+    const arrowHot = Math.min(1, p / 0.6);
+    port.arrowMat.color.copy(this.cArrowCool).lerp(this.cArrowHot, arrowHot);
+    port.arrowMat.emissive.copy(port.arrowMat.color);
+    port.arrowMat.emissiveIntensity = 0.25 + arrowHot * 1.15;
+  }
+
+  addBox(scene, w, h, d, x, y, z, mat) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    mesh.position.set(x, y, z);
+    scene.add(mesh);
+    return mesh;
+  }
+
+  mount(scene) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6d4b32, roughness: 0.68, metalness: 0.05 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x12161c, roughness: 0.94, metalness: 0.04 });
+    this.addBox(scene, 6.4, 0.05, 4.4, 0, -0.16, 0.1, floorMat);
+    this.addBox(scene, this.W + 0.38, 0.14, this.D + 0.38, 0, -0.06, 0, wood);
+
+    const glass = new THREE.MeshStandardMaterial({
+      color: 0xc5d8e6,
+      roughness: 0.06,
+      metalness: 0.04,
+      transparent: true,
+      opacity: 0.1,
+      envMapIntensity: 0.85,
+      depthWrite: false,
+    });
+    const sideH = this.H;
+    const sideY = this.H / 2;
+    this.addBox(scene, 0.03, sideH, this.D, -this.W / 2 - 0.015, sideY, 0, glass);
+    this.addBox(scene, 0.03, sideH, this.D, this.W / 2 + 0.015, sideY, 0, glass);
+    this.addBox(scene, this.W, sideH, 0.02, 0, sideY, this.D / 2 + 0.01, glass);
+
+    const backMat = new THREE.MeshStandardMaterial({
+      color: 0x0c1c22,
+      roughness: 0.58,
+      metalness: 0.12,
+      envMapIntensity: 0.35,
+    });
+    this.addBox(scene, this.W, this.H, 0.04, 0, this.H / 2, -this.D / 2 - 0.01, backMat);
+    this.addBox(scene, this.W - 0.04, 0.04, this.D - 0.04, 0, 0.02, 0, backMat);
+
+    const post = 0.055;
+    const corners = [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ];
+    for (const [sx, sz] of corners) {
+      this.addBox(
+        scene,
+        post,
+        this.H + 0.02,
+        post,
+        sx * (this.W / 2),
+        this.H / 2,
+        sz * (this.D / 2),
+        this.frameMat
+      );
+    }
+    this.addBox(scene, this.W + post, 0.045, post, 0, this.H + 0.01, this.D / 2, this.brass);
+    this.addBox(scene, this.W + post, 0.045, post, 0, this.H + 0.01, -this.D / 2, this.brass);
+    this.addBox(scene, post, 0.045, this.D + post, this.W / 2, this.H + 0.01, 0, this.brass);
+    this.addBox(scene, post, 0.045, this.D + post, -this.W / 2, this.H + 0.01, 0, this.brass);
+
+    const liquidGeo = new THREE.BoxGeometry(this.W - 0.1, 1, this.D - 0.16, 1, 18, 1);
+    const lpos = liquidGeo.attributes.position;
+    const lcol = new Float32Array(lpos.count * 3);
+    const cBot = new THREE.Color(0x072f38);
+    const cTop = new THREE.Color(0x67e4d4);
+    for (let i = 0; i < lpos.count; i++) {
+      const t = lpos.getY(i) + 0.5;
+      this.tmp.copy(cBot).lerp(cTop, Math.pow(t, 0.8));
+      lcol[i * 3] = this.tmp.r;
+      lcol[i * 3 + 1] = this.tmp.g;
+      lcol[i * 3 + 2] = this.tmp.b;
+    }
+    liquidGeo.setAttribute('color', new THREE.BufferAttribute(lcol, 3));
+    this.liquid = new THREE.Mesh(
+      liquidGeo,
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.2,
+        metalness: 0.06,
+        envMapIntensity: 0.9,
+      })
+    );
+    this.liquid.position.z = -0.03;
+    scene.add(this.liquid);
+
+    this.surface = new THREE.Mesh(
+      new THREE.BoxGeometry(this.W - 0.12, 0.04, this.D - 0.18),
+      new THREE.MeshStandardMaterial({
+        color: 0xe9fff8,
+        emissive: 0x8fe8dc,
+        emissiveIntensity: 0.22,
+        roughness: 0.16,
+        metalness: 0.08,
+        envMapIntensity: 1,
+      })
+    );
+    this.surface.position.z = -0.03;
+    scene.add(this.surface);
+
+    const lineMat = new THREE.MeshStandardMaterial({
+      color: 0xe8ff6a,
+      emissive: 0xe8ff6a,
+      emissiveIntensity: 0.72,
+      roughness: 0.38,
+    });
+    this.waterline = new THREE.Group();
+    const sideBar = new THREE.BoxGeometry(0.04, 0.038, this.D * 0.46);
+    const leftLine = new THREE.Mesh(sideBar, lineMat);
+    leftLine.position.x = -this.W / 2 - 0.055;
+    const rightLine = new THREE.Mesh(sideBar, lineMat);
+    rightLine.position.x = this.W / 2 + 0.055;
+    const frontLine = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.036, 0.028), lineMat);
+    frontLine.position.set(this.W / 2 - 0.16, 0, this.D / 2 + 0.07);
+    this.waterline.add(leftLine, rightLine, frontLine);
+    scene.add(this.waterline);
+
+    this.panels = this.levels.map((level) => {
+      const port = this.buildPort(0.2, 40);
+      port.group.position.set(this.panelX, level.frac * this.H, this.faceZ);
+      scene.add(port.group);
+      return { ...level, port };
+    });
+
+    const zRail = 0.16;
+    const rail = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.016, 0.016, this.H - 0.34, 12),
+      this.steel
+    );
+    rail.position.set(this.probeX, this.H / 2, zRail);
+    scene.add(rail);
+
+    this.probeGroup = new THREE.Group();
+    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.042, 16, 12), this.steel);
+    bead.position.set(this.probeX, 0, zRail);
+    const rodLen = this.faceZ - zRail;
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, rodLen, 10), this.steel);
+    rod.rotation.x = Math.PI / 2;
+    rod.position.set(this.probeX, 0, (zRail + this.faceZ) / 2);
+    this.probePort = this.buildPort(0.125, 32);
+    this.probePort.group.position.set(this.probeX, 0, this.faceZ);
+    this.probeGroup.add(bead, rod, this.probePort.group);
+    scene.add(this.probeGroup);
+
+    this.sync();
+    return this;
+  }
+
+  sync() {
+    const h = Math.max(0.05, this.surfaceY());
+    this.liquid.scale.y = h;
+    this.liquid.position.y = h * 0.5;
+    this.surface.position.y = h - 0.012;
+    this.waterline.position.y = h;
+    for (const panel of this.panels) {
+      this.stylePort(panel.port, this.pressureAt(panel.frac * this.H));
+    }
+    const probeY = this.probeY();
+    this.probeGroup.position.y = probeY;
+    this.stylePort(this.probePort, this.pressureAt(probeY));
+  }
+
+  readout() {
+    return {
+      fill: this.fill,
+      depth: this.depth,
+      probePush: this.pressureAt(this.probeY()),
+      shallow: this.pushAt('shallow'),
+      mid: this.pushAt('mid'),
+      deep: this.pushAt('deep'),
+    };
+  }
+}
 /* ——— Build specimens ——— */
 
 const waveCols = narrowAtStart ? 40 : 68;
@@ -4419,6 +4807,47 @@ const oozePoint = new THREE.PointLight(0xffd2a4, 26, 16, 2);
 oozePoint.position.set(0.7, 2.6, 1.55);
 oozeScene.add(oozePoint);
 ooze.mount(oozeScene);
+const depthColumn = new PressureColumn();
+const depthScene = makeScene(document.querySelector('[data-scene="depth"]'), {
+  bg: 0x10141a,
+  px: 1.42,
+  py: 1.46,
+  pz: 2.95,
+  tx: 0.62,
+  ty: 1.12,
+  tz: 0.18,
+  fov: 28,
+  minDist: 1.8,
+  maxDist: 8,
+});
+depthScene.userData.controls.enabled = false;
+depthScene.userData.controls.enableZoom = false;
+let depthStacked = null;
+function frameDepth() {
+  const stacked = window.innerWidth <= 860;
+  if (stacked === depthStacked) return;
+  depthStacked = stacked;
+  const controls = depthScene.userData.controls;
+  const cam = depthScene.userData.camera;
+  if (stacked) {
+    controls.target.set(0.0, 1.16, 0.08);
+    cam.position.set(2.55, 1.22, 4.35);
+    cam.fov = 34;
+  } else {
+    controls.target.set(1.2, 1.16, 0.1);
+    cam.position.set(3.55, 1.24, 3.72);
+    cam.fov = 38;
+  }
+  cam.updateProjectionMatrix();
+  controls.update();
+}
+frameDepth();
+window.addEventListener('resize', frameDepth);
+depthScene.add(new THREE.HemisphereLight(0xc5daf5, 0x2a1c14, 1.42));
+const depthPoint = new THREE.PointLight(0xffd2a4, 28, 22, 2);
+depthPoint.position.set(2.4, 2.5, 3.5);
+depthScene.add(depthPoint);
+depthColumn.mount(depthScene);
 /* ——— UI state ——— */
 
 const ui = {
@@ -4450,6 +4879,8 @@ const ui = {
   capWidth: 2.2,
   diffSpread: 1,
   oozeRate: 0.2,
+  depthLevel: 0.5,
+  depthFill: 0.94,
   drive: true,
 };
 
@@ -4724,6 +5155,57 @@ if (!motionOK()) {
   ooze.startDemo();
 }
 
+let depthArmed = false;
+function syncDepthChips() {
+  const frac = depthColumn.probeFrac();
+  document.querySelectorAll('[data-depth]').forEach((btn) => {
+    const target = depthColumn.levelFrac(btn.dataset.depth);
+    btn.setAttribute('aria-pressed', String(Math.abs(frac - target) < 0.04));
+  });
+}
+function reflectDepth() {
+  const depth = document.getElementById('depth-level');
+  const fill = document.getElementById('depth-fill');
+  if (document.activeElement !== depth) {
+    depth.value = depthColumn.depth.toFixed(2);
+    document.getElementById('depth-level-out').textContent = depthColumn.depth.toFixed(2);
+  }
+  if (document.activeElement !== fill) {
+    fill.value = depthColumn.fill.toFixed(2);
+    document.getElementById('depth-fill-out').textContent = depthColumn.fill.toFixed(2);
+  }
+  ui.depthLevel = depthColumn.depth;
+  ui.depthFill = depthColumn.fill;
+  syncDepthChips();
+}
+bindRange('depth-level', (v) => v.toFixed(2), (v) => {
+  ui.depthLevel = v;
+  depthColumn.setDepth(v);
+  if (depthArmed) {
+    depthColumn.userRun = true;
+    depthColumn.posed = false;
+  }
+  syncDepthChips();
+});
+bindRange('depth-fill', (v) => v.toFixed(2), (v) => {
+  ui.depthFill = v;
+  depthColumn.setFill(v);
+  if (depthArmed) {
+    depthColumn.userRun = true;
+    depthColumn.posed = false;
+  }
+});
+document.querySelectorAll('[data-depth]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    depthColumn.setPreset(btn.dataset.depth);
+    reflectDepth();
+  });
+});
+if (!motionOK()) depthColumn.poseStill();
+else depthColumn.startDemo();
+reflectDepth();
+depthArmed = true;
+depthColumn.sync();
 function syncDropShapeChips() {
   const bead = ui.dropWet < 0.34;
   const wet = ui.dropWet > 0.72;
@@ -5178,6 +5660,21 @@ oozeScene.userData.update = (t, dt) => {
   }
   ooze.sync();
 };
+depthScene.userData.update = (t, dt) => {
+  const motion = motionOK();
+  if (!motion && !depthColumn.userRun) {
+    if (!depthColumn.posed) depthColumn.poseStill();
+    reflectDepth();
+  } else if (motion && depthColumn.posed && !depthColumn.userRun) {
+    depthColumn.startDemo();
+    depthColumn.step(dt);
+    reflectDepth();
+  } else if (motion && !depthColumn.userRun) {
+    depthColumn.step(dt);
+    reflectDepth();
+  }
+  depthColumn.sync();
+};
 dropScene.userData.update = (t, dt) => {
   const motion = motionOK();
   if (motion && drop.grab < 0) {
@@ -5306,6 +5803,7 @@ window.__SML = {
   cap,
   diffusion,
   ooze,
+  depthColumn,
   ui,
   get frameCount() { return frameCount; },
   get reducedMotion() { return reducedMotion; },
